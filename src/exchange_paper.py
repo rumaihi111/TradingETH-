@@ -6,7 +6,14 @@ from typing import Any, Dict, List
 class PaperExchange:
     def __init__(self, starting_equity: float = 10000.0, state_file: str = "data/paper_wallet.json"):
         self.state_file = state_file
-        os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+        data_dir = os.path.dirname(self.state_file)
+        os.makedirs(data_dir, exist_ok=True)
+        
+        # Debug: show what's in the data directory
+        print(f"📁 Checking volume at: {os.path.abspath(data_dir)}")
+        if os.path.exists(data_dir):
+            files = os.listdir(data_dir)
+            print(f"📁 Files in data/: {files if files else '(empty)'}")
         
         # Load existing state or initialize new
         if os.path.exists(self.state_file):
@@ -18,7 +25,7 @@ class PaperExchange:
         else:
             self.equity = starting_equity
             self.position = {"coin": None, "size": 0.0, "entry": 0.0}
-            print(f"Paper wallet initialized: ${self.equity:.2f}")
+            print(f"Paper wallet initialized: ${self.equity:.2f} (file not found: {self.state_file})")
             
         self.trades: List[Dict[str, Any]] = []
         self._save_state()
