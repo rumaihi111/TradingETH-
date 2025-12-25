@@ -27,7 +27,7 @@ def run_live():
             base_url_override=settings.hyperliquid_base_url,
         )
     guard = FrequencyGuard(settings.max_trades_per_hour, settings.cooldown_minutes)
-    spot = ccxt.binance()
+    spot = ccxt.kucoin()
 
     while True:
         if not guard.allow_new_trade():
