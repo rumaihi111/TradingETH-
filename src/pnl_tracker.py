@@ -7,18 +7,23 @@ from typing import Dict, List
 class PnLTracker:
     """Track performance metrics and P&L over time"""
     
-    def __init__(self, path: str = "data/pnl_tracker.json"):
+    def __init__(self, path: str = "data/pnl_tracker.json", current_equity: float = None):
         self.path = path
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        self.data = self._load()
+        self.data = self._load(current_equity)
     
-    def _load(self) -> Dict:
+    def _load(self, current_equity: float = None) -> Dict:
         if os.path.exists(self.path):
             with open(self.path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                print(f"📊 P&L Tracker loaded: tracking since ${data.get('start_equity', 10000):.2f}")
+                return data
+        # New tracker - use current equity as baseline
+        start_eq = current_equity if current_equity is not None else 10000.0
+        print(f"📊 P&L Tracker initialized: baseline ${start_eq:.2f}")
         return {
             "start_time": time.time(),
-            "start_equity": 10000.0,
+            "start_equity": start_eq,
             "trades": [],
             "snapshots": []
         }

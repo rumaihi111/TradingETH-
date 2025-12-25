@@ -17,7 +17,6 @@ def run_live():
     settings = load_settings()
     history = HistoryStore()
     trade_log = TradeLogger()
-    pnl = PnLTracker()
     ai = AISignalClient(api_key=settings.anthropic_api_key, history_store=history)
     use_paper = settings.paper_mode
     if use_paper:
@@ -28,6 +27,11 @@ def run_live():
             testnet=settings.hyperliquid_testnet,
             base_url_override=settings.hyperliquid_base_url,
         )
+    
+    # Initialize P&L tracker with current wallet equity as baseline
+    current_equity = ex.account().get("equity", settings.paper_initial_equity)
+    pnl = PnLTracker(current_equity=current_equity)
+    
     guard = FrequencyGuard(settings.max_trades_per_hour, settings.cooldown_minutes)
     spot = ccxt.kucoin()
 
