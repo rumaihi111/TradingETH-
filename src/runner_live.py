@@ -54,36 +54,54 @@ def run_live():
         decision_raw: Dict = ai.fetch_signal(candles)
         trade = clamp_decision(decision_raw, settings.max_position_fraction)
 
-        # Check if we have an open position to close
-        if open_positions and trade.side == "flat":
-            # Claude wants to close position
-            ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
-            close_price = ohlcv_close[0][4]  # current close
-            pos = open_positions[0]
-            if use_paper:
-                close_result = ex.close_position(settings.trading_pair, price=close_price)
+        # Determine current position state
+        current_pos = open_positions[0] if open_positions else None
+        current_side = None
+        if current_pos:
+            size = current_pos.get("size", 0)
+            if size > 0:
+                current_side = "long"
+            elif size < 0:
+                current_side = "short"
+
+        # Decision logic: close/flip/hold/open based on signal
+        if trade.side == "flat":
+            if current_pos:
+                # Claude wants to close position
+                ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
+                close_price = ohlcv_close[0][4]
+                if use_paper:
+                    close_result = ex.close_position(settings.trading_pair, price=close_price)
+                else:
+                    close_result = ex.close_position(settings.trading_pair)
+                
+                # Record P&L
+                if "pnl" in close_result:
+                    pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, close_result["pnl"])
+                
+                trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
+                print(f"Signal: flat → Position closed @ {close_price}, result={close_result}")
+                guard.record_close()
             else:
-                close_result = ex.close_position(settings.trading_pair)
-            
-            # Record P&L
-            if "pnl" in close_result:
-                pnl.record_trade("close", abs(pos.get("size", 0)), pos.get("entry", 0), close_price, close_result["pnl"])
-            
-            trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
-            print(f"Position closed @ {close_price}, result={close_result}")
-            guard.record_close()
+                print(f"Signal: flat → No position, staying flat")
             time.sleep(10)
             continue
 
-        if trade.side == "flat" or trade.position_fraction <= 0:
+        if trade.position_fraction <= 0:
+            print(f"Signal: {trade.side} with 0 size → Ignoring")
             time.sleep(10)
             continue
 
-        # Close any existing position before opening new one (max 1 position rule)
-        if open_positions:
+        # Check if we need to flip or can hold existing position
+        if current_pos and current_side == trade.side:
+            print(f"Signal: {trade.side} → Already in {current_side} position, holding")
+            time.sleep(10)
+            continue
+
+        # Close opposite position before opening new
+        if current_pos and current_side != trade.side:
             ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
             close_price = ohlcv_close[0][4]
-            pos = open_positions[0]
             if use_paper:
                 close_result = ex.close_position(settings.trading_pair, price=close_price)
             else:
@@ -91,10 +109,10 @@ def run_live():
             
             # Record P&L
             if "pnl" in close_result:
-                pnl.record_trade("close", abs(pos.get("size", 0)), pos.get("entry", 0), close_price, close_result["pnl"])
+                pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, close_result["pnl"])
             
             trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
-            print(f"Position closed @ {close_price} before opening new, result={close_result}")
+            print(f"Signal: {trade.side} → Closed {current_side} position @ {close_price} (flipping)")
             guard.record_close()
             time.sleep(5)
 
