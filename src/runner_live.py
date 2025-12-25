@@ -45,6 +45,13 @@ def run_live():
         candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
         price = candles[-1]["close"]
         
+        # Check for liquidation in paper mode
+        if use_paper and hasattr(ex, 'check_liquidation'):
+            if ex.check_liquidation(price):
+                print("💥 Position liquidated due to excessive loss")
+                time.sleep(300)  # Wait 5 minutes before next trade
+                continue
+        
         # Show current wallet balance and P&L
         account = ex.account()
         equity = account.get("equity", 0)
