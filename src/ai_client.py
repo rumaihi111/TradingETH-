@@ -68,6 +68,7 @@ Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fi
         }
         print(f"\n{'='*80}")
         print(f"CLAUDE QUERY:")
+        print(f"\nFull Prompt:\n{prompt}\n")
         print(f"Candles: {len(candles)} 5m bars, last close: {candles[-1]['close']}")
         print(f"Recent decisions: {len(recent_decisions)} in last 3h")
         print(f"{'='*80}\n")
