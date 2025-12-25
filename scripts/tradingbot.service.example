@@ -1,0 +1,14 @@
+[Unit]
+Description=TradingETH bot (paper or live)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/workspaces/TradingETH-
+EnvironmentFile=/workspaces/TradingETH-/.env
+ExecStart=/usr/bin/env bash -lc 'cd /workspaces/TradingETH- && source .venv/bin/activate && PYTHONPATH=/workspaces/TradingETH-/src python -m runner_live'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
