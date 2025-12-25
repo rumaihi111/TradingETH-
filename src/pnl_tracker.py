@@ -79,18 +79,25 @@ class PnLTracker:
             "largest_loss": min((t["pnl"] for t in losing), default=0),
         }
     
-    def print_balance_sheet(self, current_equity: float):
-        """Print formatted balance sheet"""
+    def print_balance_sheet(self, current_equity: float, unrealized_pnl: float = 0, position_value: float = 0):
+        """Print formatted balance sheet with unrealized P&L"""
         stats = self.get_stats(current_equity)
+        total_equity = current_equity + position_value
+        total_pnl = stats['total_pnl'] + unrealized_pnl
+        total_pnl_pct = (total_pnl / stats['start_equity']) * 100 if stats['start_equity'] else 0
         
         print("\n" + "="*60)
         print("📊 BALANCE SHEET & P&L REPORT")
         print("="*60)
         print(f"Starting Equity:    ${stats['start_equity']:,.2f}")
-        print(f"Current Equity:     ${stats['current_equity']:,.2f}")
-        print(f"Total P&L:          ${stats['total_pnl']:+,.2f} ({stats['pnl_pct']:+.2f}%)")
+        print(f"Cash Balance:       ${current_equity:,.2f}")
+        if position_value != 0:
+            print(f"Position Value:     ${position_value:,.2f}")
+            print(f"Unrealized P&L:     ${unrealized_pnl:+,.2f}")
+        print(f"Total Equity:       ${total_equity:,.2f}")
+        print(f"Total P&L:          ${total_pnl:+,.2f} ({total_pnl_pct:+.2f}%)")
         print("-"*60)
-        print(f"Total Trades:       {stats['total_trades']}")
+        print(f"Closed Trades:      {stats['total_trades']}")
         print(f"Winning Trades:     {stats['winning_trades']} ({stats['win_rate']:.1f}%)")
         print(f"Losing Trades:      {stats['losing_trades']}")
         print("-"*60)

@@ -49,7 +49,19 @@ def run_live():
         account = ex.account()
         equity = account.get("equity", 0)
         open_positions = ex.positions()
-        pnl.print_balance_sheet(equity)
+        
+        # Calculate unrealized P&L from open position
+        unrealized_pnl = 0
+        position_value = 0
+        if open_positions:
+            pos = open_positions[0]
+            pos_size = pos.get("size", 0)
+            entry_price = pos.get("entry", 0)
+            if pos_size != 0 and entry_price != 0:
+                position_value = abs(pos_size) * price
+                unrealized_pnl = (price - entry_price) * pos_size
+        
+        pnl.print_balance_sheet(equity, unrealized_pnl, position_value)
         
         decision_raw: Dict = ai.fetch_signal(candles)
         trade = clamp_decision(decision_raw, settings.max_position_fraction)
