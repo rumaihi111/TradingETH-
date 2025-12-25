@@ -66,6 +66,12 @@ Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fi
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
         }
+        print(f"\n{'='*80}")
+        print(f"CLAUDE QUERY:")
+        print(f"Candles: {len(candles)} 5m bars, last close: {candles[-1]['close']}")
+        print(f"Recent decisions: {len(recent_decisions)} in last 3h")
+        print(f"{'='*80}\n")
+        
         with httpx.Client(timeout=15) as client:
             resp = client.post(self.endpoint, headers=headers, json=payload)
             resp.raise_for_status()
@@ -76,6 +82,10 @@ Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fi
             raise RuntimeError("No content from AI")
         text_blocks = [c.get("text", "") for c in content if c.get("type") == "text"]
         combined = "\n".join(text_blocks).strip()
+        
+        print(f"CLAUDE RESPONSE (raw):")
+        print(combined)
+        print(f"{'='*80}\n")
         try:
             import json
 
