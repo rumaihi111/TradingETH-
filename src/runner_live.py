@@ -84,18 +84,20 @@ def run_live():
                 guard.record_close()
             else:
                 print(f"Signal: flat → No position, staying flat")
-            time.sleep(10)
+            # Wait 5 minutes before next query
+            time.sleep(300)
             continue
 
         if trade.position_fraction <= 0:
             print(f"Signal: {trade.side} with 0 size → Ignoring")
-            time.sleep(10)
+            time.sleep(300)
             continue
 
         # Check if we need to flip or can hold existing position
         if current_pos and current_side == trade.side:
             print(f"Signal: {trade.side} → Already in {current_side} position, holding")
-            time.sleep(10)
+            # Wait longer when holding to avoid rate limits (5 minutes)
+            time.sleep(300)
             continue
 
         # Close opposite position before opening new
