@@ -116,8 +116,10 @@ def run_live():
             guard.record_close()
             time.sleep(5)
 
-        # Open new position
-        size = trade.position_fraction
+        # Open new position - calculate actual size from position_fraction
+        notional_value = equity * trade.position_fraction  # USD to allocate
+        size = notional_value / price  # Convert to ETH amount
+        
         if use_paper:
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct, price=price)
         else:
@@ -128,7 +130,7 @@ def run_live():
         
         trade_log.log_trade({"decision": trade.model_dump(), "result": result, "price": price})
         guard.record_open()
-        print(f"Trade placed: {trade.side} {size} @ {price}, result={result}")
+        print(f"Trade placed: {trade.side} {size:.4f} ETH (${notional_value:.2f}) @ ${price:.2f}, result={result}")
 
         # Wait cooldown before next signal
         time.sleep(settings.cooldown_minutes * 60)

@@ -49,7 +49,9 @@ TRADING RULES:
 - Trade max 2 times per hour with a 30 minute interval break per trade.
 - Trade on 5 min chart only.
 
-Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fields: side in {long, short, flat}, position_fraction (0-0.5), stop_loss_pct, take_profit_pct, max_slippage_pct. Keep trades sparse and avoid overtrading. Return JSON only."""
+Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fields: side in {long, short, flat}, position_fraction (0-0.5), stop_loss_pct, take_profit_pct, max_slippage_pct. Keep trades sparse and avoid overtrading.
+
+CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown. Just the raw JSON."""
         payload = {
             "model": "claude-3-haiku-20240307",
             "max_tokens": 256,
@@ -83,17 +85,19 @@ Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fi
         print(f"{'='*80}\n")
         try:
             import json
+            import re
 
-            # Strip markdown code fence or "json" prefix if present
-            if combined.startswith("json"):
-                combined = combined[4:].strip()
-            if combined.startswith("```json"):
-                combined = combined[7:]
-            if combined.endswith("```"):
-                combined = combined[:-3]
-            combined = combined.strip()
+            # Extract JSON object from response (handles prose before/after)
+            # Find first { and last } to extract pure JSON
+            start = combined.find("{")
+            end = combined.rfind("}") + 1
             
-            parsed = json.loads(combined)
+            if start == -1 or end == 0:
+                raise ValueError("No JSON object found in response")
+            
+            json_str = combined[start:end].strip()
+            parsed = json.loads(json_str)
+            
             if self.history_store:
                 self.history_store.record_decision(parsed)
             return parsed
