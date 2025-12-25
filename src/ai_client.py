@@ -1,7 +1,7 @@
 import httpx
 from typing import Any, Dict, List, Optional
 
-from history_store import HistoryStore
+from .history_store import HistoryStore
 
 
 class AISignalClient:
