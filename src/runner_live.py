@@ -38,6 +38,12 @@ def run_live():
         ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=50)
         candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
         price = candles[-1]["close"]
+        
+        # Show current wallet balance
+        account = ex.account()
+        equity = account.get("equity", 0)
+        print(f"\n💰 Current Wallet: ${equity:.2f}")
+        
         decision_raw: Dict = ai.fetch_signal(candles)
         trade = clamp_decision(decision_raw, settings.max_position_fraction)
 
