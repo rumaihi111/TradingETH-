@@ -9,6 +9,7 @@ from .exchange_hyperliquid import HyperliquidClient
 from .exchange_paper import PaperExchange
 from .history_store import HistoryStore
 from .trade_logger import TradeLogger
+from .pnl_tracker import PnLTracker
 from .risk import FrequencyGuard, clamp_decision
 
 
@@ -16,6 +17,7 @@ def run_live():
     settings = load_settings()
     history = HistoryStore()
     trade_log = TradeLogger()
+    pnl = PnLTracker()
     ai = AISignalClient(api_key=settings.anthropic_api_key, history_store=history)
     use_paper = settings.paper_mode
     if use_paper:
@@ -39,31 +41,75 @@ def run_live():
         candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
         price = candles[-1]["close"]
         
-        # Show current wallet balance
+        # Show current wallet balance and P&L
         account = ex.account()
         equity = account.get("equity", 0)
-        print(f"\n💰 Current Wallet: ${equity:.2f}")
+        open_positions = ex.positions()
+        pnl.print_balance_sheet(equity)
         
         decision_raw: Dict = ai.fetch_signal(candles)
         trade = clamp_decision(decision_raw, settings.max_position_fraction)
+
+        # Check if we have an open position to close
+        if open_positions and trade.side == "flat":
+            # Claude wants to close position
+            ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
+            close_price = ohlcv_close[0][4]  # current close
+            pos = open_positions[0]
+            if use_paper:
+                close_result = ex.close_position(settings.trading_pair, price=close_price)
+            else:
+                close_result = ex.close_position(settings.trading_pair)
+            
+            # Record P&L
+            if "pnl" in close_result:
+                pnl.record_trade("close", abs(pos.get("size", 0)), pos.get("entry", 0), close_price, close_result["pnl"])
+            
+            trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
+            print(f"Position closed @ {close_price}, result={close_result}")
+            guard.record_close()
+            time.sleep(10)
+            continue
 
         if trade.side == "flat" or trade.position_fraction <= 0:
             time.sleep(10)
             continue
 
-        # TODO: fetch live price; placeholder uses position fraction as size
+        # Close any existing position before opening new one (max 1 position rule)
+        if open_positions:
+            ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
+            close_price = ohlcv_close[0][4]
+            pos = open_positions[0]
+            if use_paper:
+                close_result = ex.close_position(settings.trading_pair, price=close_price)
+            else:
+                close_result = ex.close_position(settings.trading_pair)
+            
+            # Record P&L
+            if "pnl" in close_result:
+                pnl.record_trade("close", abs(pos.get("size", 0)), pos.get("entry", 0), close_price, close_result["pnl"])
+            
+            trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
+            print(f"Position closed @ {close_price} before opening new, result={close_result}")
+            guard.record_close()
+            time.sleep(5)
+
+        # Open new position
         size = trade.position_fraction
         if use_paper:
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct, price=price)
         else:
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct)
+        
+        # Record trade open
+        pnl.record_trade("open", size, price)
+        
         trade_log.log_trade({"decision": trade.model_dump(), "result": result, "price": price})
         guard.record_open()
         print(f"Trade placed: {trade.side} {size} @ {price}, result={result}")
 
-        # TODO: monitor position and exit by stop/TP or signal
+        # Wait cooldown before next signal
         time.sleep(settings.cooldown_minutes * 60)
-        guard.record_close()
 
 
 if __name__ == "__main__":
