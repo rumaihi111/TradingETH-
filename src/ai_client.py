@@ -79,8 +79,15 @@ Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fi
         try:
             import json
 
-            if combined.startswith("```"):
-                combined = combined.strip("`\n ")
+            # Strip markdown code fence or "json" prefix if present
+            if combined.startswith("json"):
+                combined = combined[4:].strip()
+            if combined.startswith("```json"):
+                combined = combined[7:]
+            if combined.endswith("```"):
+                combined = combined[:-3]
+            combined = combined.strip()
+            
             parsed = json.loads(combined)
             if self.history_store:
                 self.history_store.record_decision(parsed)
