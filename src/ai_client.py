@@ -43,7 +43,7 @@ RULES:
 5. Always answer in short detailed knowledgeable answers.
 
 TRADING RULES:
-- Trade on 0x leverage.
+- Trade on 10x leverage.
 - Max open trades at once is 1.
 - Compound the money.
 - Trade max 2 times per hour with a 30 minute interval break per trade.
