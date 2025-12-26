@@ -82,7 +82,8 @@ class PnLTracker:
     def print_balance_sheet(self, current_equity: float, unrealized_pnl: float = 0, position_value: float = 0):
         """Print formatted balance sheet with unrealized P&L"""
         stats = self.get_stats(current_equity)
-        total_equity = current_equity + position_value
+        # For leveraged positions, equity = cash + unrealized P&L (not + full position value)
+        total_equity = current_equity + unrealized_pnl
         total_pnl = stats['total_pnl'] + unrealized_pnl
         total_pnl_pct = (total_pnl / stats['start_equity']) * 100 if stats['start_equity'] else 0
         
@@ -92,7 +93,7 @@ class PnLTracker:
         print(f"Starting Equity:    ${stats['start_equity']:,.2f}")
         print(f"Cash Balance:       ${current_equity:,.2f}")
         if position_value != 0:
-            print(f"Position Value:     ${position_value:,.2f}")
+            print(f"Position Value:     ${position_value:,.2f} (leveraged)")
             print(f"Unrealized P&L:     ${unrealized_pnl:+,.2f}")
         print(f"Total Equity:       ${total_equity:,.2f}")
         print(f"Total P&L:          ${total_pnl:+,.2f} ({total_pnl_pct:+.2f}%)")
