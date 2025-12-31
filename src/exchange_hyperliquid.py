@@ -23,7 +23,9 @@ class HyperliquidClient:
 
     def account(self) -> Dict[str, Any]:
         """Get account state with equity"""
+        print(f"🔍 Querying wallet address: {self.wallet.address}")
         state = self.info.user_state(self.wallet.address)
+        print(f"🔍 Raw marginSummary: {state.get('marginSummary', {})}")
         summary = state.get("marginSummary", {})
         equity = float(summary.get("accountValue", 0))
         print(f"✅ Hyperliquid connected: ${equity:.2f} USDC")
