@@ -22,10 +22,15 @@ class HyperliquidClient:
         self.exchange = Exchange(self.wallet, base_url, account_address=self.wallet.address)
 
     def account(self) -> Dict[str, Any]:
-        return self.info.user_state(self.wallet.address)
+        """Get account state with equity"""
+        state = self.info.user_state(self.wallet.address)
+        summary = state.get("marginSummary", {})
+        equity = float(summary.get("accountValue", 0))
+        print(f"✅ Hyperliquid connected: ${equity:.2f} USDC")
+        return {"equity": equity, "raw_state": state}
 
     def positions(self) -> List[Dict[str, Any]]:
-        state = self.account()
+        state = self.account().get("raw_state", {})
         positions = []
         for p in state.get("assetPositions", []):
             pos = p.get("position") or {}
@@ -39,16 +44,26 @@ class HyperliquidClient:
             })
         return positions
 
-    def equity(self) -> float:
-        state = self.account()
-        summary = state.get("marginSummary", {})
-        return float(summary.get("accountValue", 0))
-
-    def place_market(self, symbol: str, side: str, size: float, max_slippage_pct: float) -> Dict[str, Any]:
+    def place_market(self, symbol: str, side: str, size: float, max_slippage_pct: float, price: float = None) -> Dict[str, Any]:
+        """Place market order (price param for API compatibility, not used)"""
         is_buy = side.lower() == "long"
         slippage = max_slippage_pct / 100
-        return self.exchange.market_open(symbol, is_buy=is_buy, sz=size, px=None, slippage=slippage)
+        print(f"🚨 LIVE TRADE: {side.upper()} {size:.4f} {symbol} with slippage {slippage*100:.1f}%")
+        result = self.exchange.market_open(symbol, is_buy=is_buy, sz=size, px=None, slippage=slippage)
+        print(f"📊 Order result: {result}")
+        return result
 
-    def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.5) -> Dict[str, Any]:
+    def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.5, price: float = None) -> Dict[str, Any]:
+        """Close position (price param for API compatibility, not used)"""
         slippage = max_slippage_pct / 100
-        return self.exchange.market_close(symbol, sz=size, px=None, slippage=slippage)
+        print(f"🚨 CLOSING: {symbol} position")
+        result = self.exchange.market_close(symbol, sz=size, px=None, slippage=slippage)
+        
+        # Calculate PnL from result
+        if "status" in result and result.get("status") == "ok":
+            # Extract PnL if available
+            pnl = result.get("response", {}).get("data", {}).get("statuses", [{}])[0].get("filled", 0)
+            result["pnl"] = float(pnl) if pnl else 0
+        
+        print(f"📊 Close result: {result}")
+        return result
