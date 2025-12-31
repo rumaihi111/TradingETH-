@@ -83,10 +83,10 @@ class PnLTracker:
             "largest_loss": min((t["pnl"] for t in losing), default=0),
         }
     
-    def print_balance_sheet(self, current_equity: float, unrealized_pnl: float = 0, position_value: float = 0):
-        """Print formatted balance sheet with unrealized P&L"""
+    def print_balance_sheet(self, current_equity: float, unrealized_pnl: float = 0, position: Dict = None):
+        """Print formatted balance sheet with unrealized P&L and position details"""
         stats = self.get_stats(current_equity)
-        # For leveraged positions, equity = cash + unrealized P&L (not + full position value)
+        # Total account value includes unrealized P&L from open positions
         total_equity = current_equity + unrealized_pnl
         total_pnl = stats['total_pnl'] + unrealized_pnl
         total_pnl_pct = (total_pnl / stats['start_equity']) * 100 if stats['start_equity'] else 0
@@ -95,11 +95,16 @@ class PnLTracker:
         print("📊 BALANCE SHEET & P&L REPORT")
         print("="*60)
         print(f"Starting Equity:    ${stats['start_equity']:,.2f}")
-        print(f"Cash Balance:       ${current_equity:,.2f}")
-        if position_value != 0:
-            print(f"Position Value:     ${position_value:,.2f} (leveraged)")
+        print(f"Current Equity:     ${current_equity:,.2f}")
+        
+        # Show open position details if any
+        if position and abs(position.get('size', 0)) > 0.0001:
+            side = "LONG" if position['size'] > 0 else "SHORT"
+            size = abs(position['size'])
+            entry = position.get('entry_price', position.get('entry', 0))
+            print(f"Open Position:      {side} {size:.4f} ETH @ ${entry:.2f}")
             print(f"Unrealized P&L:     ${unrealized_pnl:+,.2f}")
-        print(f"Total Equity:       ${total_equity:,.2f}")
+        print(f"Total Account Value: ${total_equity:,.2f}")
         print(f"Total P&L:          ${total_pnl:+,.2f} ({total_pnl_pct:+.2f}%)")
         print("-"*60)
         print(f"Closed Trades:      {stats['total_trades']}")

@@ -90,7 +90,9 @@ async def run_live_async():
                 unrealized_pnl = (price - entry_price) * pos_size
                 print(f"💰 Unrealized P&L: ${unrealized_pnl:+.2f}")
         
-        pnl.print_balance_sheet(equity, unrealized_pnl, position_value)
+        # Pass position object to balance sheet instead of position_value
+        current_position = open_positions[0] if open_positions else None
+        pnl.print_balance_sheet(equity, unrealized_pnl, current_position)
         
         # Check if we should query Claude (respect cooldown)
         if not guard.allow_new_trade():
