@@ -68,22 +68,33 @@ class TradingTelegramBot:
 
     # Command Handlers
     async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Show current wallet balance"""
+        """Show current wallet balance and positions"""
         try:
             account = self.hyperliquid.account()
             equity = account.get("equity", 0)
             
             positions = self.hyperliquid.positions()
-            pos_text = "No open positions"
-            if positions:
+            
+            message = f"💰 **Account Balance**\n\n"
+            message += f"Equity: ${equity:.2f} USDC\n"
+            
+            if positions and abs(positions[0].get('size', 0)) > 0.0001:
                 pos = positions[0]
-                pos_text = f"Position: {pos['size']:.4f} {pos['coin']} @ ${pos['entry']:.2f}\nUnrealized P&L: ${pos['unrealized']:.2f}"
+                side = "LONG 📈" if pos['size'] > 0 else "SHORT 📉"
+                size = abs(pos['size'])
+                entry = pos.get('entry_price', pos.get('entry', 0))
+                unrealized = pos.get('unrealized_pnl', pos.get('unrealized', 0))
+                total_value = equity + unrealized
+                
+                message += f"\n**Open Position:**\n"
+                message += f"• {side} {size:.4f} ETH\n"
+                message += f"• Entry: ${entry:.2f}\n"
+                message += f"• Unrealized P&L: ${unrealized:+.2f}\n"
+                message += f"\n**Total Account Value:** ${total_value:.2f}"
+            else:
+                message += "\nNo open positions"
             
-            message = f"💰 **Wallet Balance**\n\n"
-            message += f"Cash: ${equity:.2f} USDC\n"
-            message += f"{pos_text}"
-            
-            await update.message.reply_text(message)
+            await update.message.reply_text(message, parse_mode='Markdown')
         except Exception as e:
             await update.message.reply_text(f"❌ Error: {e}")
 
