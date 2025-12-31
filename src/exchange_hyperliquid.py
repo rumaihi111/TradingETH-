@@ -37,16 +37,37 @@ class HyperliquidClient:
     def positions(self) -> List[Dict[str, Any]]:
         state = self.account().get("raw_state", {})
         positions = []
-        for p in state.get("assetPositions", []):
+        asset_positions = state.get("assetPositions", [])
+        
+        print(f"🔍 Raw assetPositions count: {len(asset_positions)}")
+        
+        for p in asset_positions:
             pos = p.get("position") or {}
             if not pos:
                 continue
-            positions.append({
+            
+            size = float(pos.get("szi", 0))
+            # Skip positions with zero size
+            if abs(size) < 0.0001:
+                continue
+                
+            position_data = {
+                "symbol": pos.get("coin"),
                 "coin": pos.get("coin"),
-                "size": float(pos.get("szi", 0)),
+                "size": size,
                 "entry": float(pos.get("entryPx") or 0),
+                "entry_price": float(pos.get("entryPx") or 0),
                 "unrealized": float(pos.get("unrealizedPnl") or 0),
-            })
+                "unrealized_pnl": float(pos.get("unrealizedPnl") or 0),
+                "leverage": float(pos.get("leverage", {}).get("value", 0)) if isinstance(pos.get("leverage"), dict) else 0,
+            }
+            
+            print(f"✅ Found position: {position_data}")
+            positions.append(position_data)
+        
+        if not positions:
+            print("❌ No open positions found")
+            
         return positions
 
     def place_market(self, symbol: str, side: str, size: float, max_slippage_pct: float, price: float = None) -> Dict[str, Any]:
