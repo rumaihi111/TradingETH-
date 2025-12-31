@@ -55,7 +55,7 @@ class PnLTracker:
         self.data["snapshots"].append(snap)
         self._save()
     
-    def get_stats(self, current_equity: float) -> Dict:
+    def get_stats(self, current_equity: float = None) -> Dict:
         """Calculate performance statistics"""
         closed_trades = [t for t in self.data["trades"] if t.get("pnl") is not None]
         winning = [t for t in closed_trades if t["pnl"] > 0]
@@ -63,13 +63,17 @@ class PnLTracker:
         
         total_pnl = sum(t["pnl"] for t in closed_trades)
         start_eq = self.data.get("start_equity", 10000)
+        curr_eq = current_equity if current_equity is not None else start_eq + total_pnl
         
         return {
-            "start_equity": start_eq,
-            "current_equity": current_equity,
+            "starting_equity": start_eq,
+            "start_equity": start_eq,  # Keeping both for backwards compatibility
+            "current_equity": curr_eq,
             "total_pnl": total_pnl,
-            "pnl_pct": (total_pnl / start_eq) * 100 if start_eq else 0,
-            "total_trades": len(closed_trades),
+            "total_pnl_pct": (total_pnl / start_eq) * 100 if start_eq else 0,
+            "pnl_pct": (total_pnl / start_eq) * 100 if start_eq else 0,  # Alias
+            "total_closed_trades": len(closed_trades),
+            "total_trades": len(closed_trades),  # Alias
             "winning_trades": len(winning),
             "losing_trades": len(losing),
             "win_rate": (len(winning) / len(closed_trades) * 100) if closed_trades else 0,

@@ -20,6 +20,8 @@ class Settings(BaseModel):
     cooldown_minutes: int = Field(30, ge=0)
     paper_mode: bool = Field(False, alias="PAPER_MODE")
     paper_initial_equity: float = Field(10000.0, ge=0, alias="PAPER_INITIAL_EQUITY")
+    telegram_token: str = Field("", alias="TELEGRAM_TOKEN")
+    telegram_chat_id: str = Field("", alias="TELEGRAM_CHAT_ID")
 
 
 def load_settings() -> Settings:

@@ -1,5 +1,6 @@
 import time
-from typing import Dict
+import asyncio
+from typing import Dict, Optional
 
 import ccxt
 
@@ -11,9 +12,14 @@ from .history_store import HistoryStore
 from .trade_logger import TradeLogger
 from .pnl_tracker import PnLTracker
 from .risk import FrequencyGuard, clamp_decision
+from .telegram_bot import TradingTelegramBot, schedule_daily_reports
 
 
-def run_live():
+telegram_bot: Optional[TradingTelegramBot] = None
+
+
+async def run_live_async():
+    global telegram_bot
     settings = load_settings()
     history = HistoryStore()
     trade_log = TradeLogger()
@@ -31,6 +37,19 @@ def run_live():
     # Initialize P&L tracker with current wallet equity as baseline
     current_equity = ex.account().get("equity", settings.paper_initial_equity)
     pnl = PnLTracker(current_equity=current_equity)
+    
+    # Initialize Telegram bot if configured
+    if settings.telegram_token and settings.telegram_chat_id:
+        telegram_bot = TradingTelegramBot(
+            telegram_token=settings.telegram_token,
+            chat_id=settings.telegram_chat_id,
+            hyperliquid_client=ex,
+            pnl_tracker=pnl,
+        )
+        await telegram_bot.start()
+        # Start daily report scheduler in background
+        asyncio.create_task(schedule_daily_reports(telegram_bot))
+        print("🤖 Telegram bot enabled")
     
     guard = FrequencyGuard(settings.max_trades_per_hour, settings.cooldown_minutes)
     spot = ccxt.kucoin()
@@ -97,26 +116,39 @@ def run_live():
                 # Record P&L
                 if "pnl" in close_result:
                     pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, close_result["pnl"])
+                    # Send Telegram notification
+                    if telegram_bot:
+                        await telegram_bot.notify_trade_closed(
+                            current_side,
+                            abs(current_pos.get("size", 0)),
+                            current_pos.get("entry", 0),
+                            close_price,
+                            close_result["pnl"]
+                        )
                 
                 trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
                 print(f"Signal: flat → Position closed @ {close_price}, result={close_result}")
                 guard.record_close()
+                
+                # Notify going neutral
+                if telegram_bot:
+                    await telegram_bot.notify_neutral()
             else:
                 print(f"Signal: flat → No position, staying flat")
             # Wait 5 minutes before next query
-            time.sleep(300)
+            await asyncio.sleep(300)
             continue
 
         if trade.position_fraction <= 0:
             print(f"Signal: {trade.side} with 0 size → Ignoring")
-            time.sleep(300)
+            await asyncio.sleep(300)
             continue
 
         # Check if we need to flip or can hold existing position
         if current_pos and current_side == trade.side:
             print(f"Signal: {trade.side} → Already in {current_side} position, holding")
             # Wait longer when holding to avoid rate limits (5 minutes)
-            time.sleep(300)
+            await asyncio.sleep(300)
             continue
 
         # Close opposite position before opening new
@@ -131,11 +163,20 @@ def run_live():
             # Record P&L
             if "pnl" in close_result:
                 pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, close_result["pnl"])
+                # Send Telegram notification
+                if telegram_bot:
+                    await telegram_bot.notify_trade_closed(
+                        current_side,
+                        abs(current_pos.get("size", 0)),
+                        current_pos.get("entry", 0),
+                        close_price,
+                        close_result["pnl"]
+                    )
             
             trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
             print(f"Signal: {trade.side} → Closed {current_side} position @ {close_price} (flipping)")
             guard.record_close()
-            time.sleep(5)
+            await asyncio.sleep(5)
 
         # Open new position - calculate actual size from position_fraction
         notional_value = equity * trade.position_fraction  # USD to allocate
@@ -149,12 +190,21 @@ def run_live():
         # Record trade open
         pnl.record_trade("open", size, price)
         
+        # Send Telegram notification for opened trade
+        if telegram_bot:
+            await telegram_bot.notify_trade_opened(trade.side, size, price)
+        
         trade_log.log_trade({"decision": trade.model_dump(), "result": result, "price": price})
         guard.record_open()
         print(f"Trade placed: {trade.side} {size:.4f} ETH (${notional_value:.2f}) @ ${price:.2f}, result={result}")
 
         # Wait cooldown before next signal
-        time.sleep(settings.cooldown_minutes * 60)
+        await asyncio.sleep(settings.cooldown_minutes * 60)
+
+
+def run_live():
+    """Entry point that runs the async trading loop"""
+    asyncio.run(run_live_async())
 
 
 if __name__ == "__main__":
