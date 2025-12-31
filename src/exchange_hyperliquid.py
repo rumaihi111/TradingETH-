@@ -52,6 +52,12 @@ class HyperliquidClient:
         slippage = max_slippage_pct / 100
         # Round size to 4 decimals to avoid Hyperliquid wire encoding errors
         size = round(size, 4)
+        
+        # Check minimum position size (Hyperliquid typically requires > 0.001 ETH)
+        if size < 0.001:
+            print(f"⚠️ Position size {size:.4f} ETH too small (min 0.001), skipping trade")
+            return {"status": "error", "error": "Position size below minimum"}
+        
         print(f"🚨 LIVE TRADE: {side.upper()} {size:.4f} {symbol} with slippage {slippage*100:.1f}%")
         result = self.exchange.market_open(symbol, is_buy=is_buy, sz=size, px=None, slippage=slippage)
         print(f"📊 Order result: {result}")

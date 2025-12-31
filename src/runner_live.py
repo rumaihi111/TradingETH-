@@ -55,26 +55,28 @@ async def run_live_async():
     spot = ccxt.kucoin()
 
     while True:
-        if not guard.allow_new_trade():
-            time.sleep(10)
-            continue
-
         # Fetch latest 5m candles for Claude analysis
         ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=50)
         candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
         price = candles[-1]["close"]
         
+        # Get current positions ONCE at start of loop
+        account = ex.account()
+        equity = account.get("equity", 0)
+        open_positions = ex.positions()
+        
+        # Log position status
+        if open_positions:
+            pos = open_positions[0]
+            side = "LONG" if pos.get("size", 0) > 0 else "SHORT"
+            print(f"📍 Position: {side} {abs(pos.get('size', 0)):.4f} ETH @ ${pos.get('entry', 0):.2f}")
+        
         # Check for liquidation in paper mode
         if use_paper and hasattr(ex, 'check_liquidation'):
             if ex.check_liquidation(price):
                 print("💥 Position liquidated due to excessive loss")
-                time.sleep(300)  # Wait 5 minutes before next trade
+                await asyncio.sleep(300)  # Wait 5 minutes before next trade
                 continue
-        
-        # Show current wallet balance and P&L
-        account = ex.account()
-        equity = account.get("equity", 0)
-        open_positions = ex.positions()
         
         # Calculate unrealized P&L from open position
         unrealized_pnl = 0
@@ -86,8 +88,15 @@ async def run_live_async():
             if pos_size != 0 and entry_price != 0:
                 position_value = abs(pos_size) * price
                 unrealized_pnl = (price - entry_price) * pos_size
+                print(f"💰 Unrealized P&L: ${unrealized_pnl:+.2f}")
         
         pnl.print_balance_sheet(equity, unrealized_pnl, position_value)
+        
+        # Check if we should query Claude (respect cooldown)
+        if not guard.allow_new_trade():
+            print(f"⏸️  Cooldown active, waiting...")
+            await asyncio.sleep(60)  # Check again in 1 minute
+            continue
         
         decision_raw: Dict = ai.fetch_signal(candles)
         trade = clamp_decision(decision_raw, settings.max_position_fraction)
@@ -186,6 +195,17 @@ async def run_live_async():
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct, price=price)
         else:
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct)
+        
+        # Wait a moment for position to register on exchange
+        await asyncio.sleep(2)
+        
+        # Verify position was opened
+        verification = ex.positions()
+        if verification:
+            verified_pos = verification[0]
+            print(f"✅ Position verified: {trade.side.upper()} {abs(verified_pos.get('size', 0)):.4f} ETH @ ${verified_pos.get('entry', 0):.2f}")
+        else:
+            print(f"⚠️ Warning: No position found after placing order. Result: {result}")
         
         # Record trade open
         pnl.record_trade("open", size, price)
