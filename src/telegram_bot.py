@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from .config import Settings
@@ -39,8 +39,19 @@ class TradingTelegramBot:
         """Start the Telegram bot"""
         await self.app.initialize()
         await self.app.start()
-        await self.app.updater.start_polling()
-        logger.info("🤖 Telegram bot started")
+        await self.app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        
+        # Set bot commands menu
+        commands = [
+            ("balance", "Show wallet balance and positions"),
+            ("winrate", "Show trading statistics and win rate"),
+            ("pnl", "Show P&L report"),
+            ("status", "Show bot status"),
+            ("deposit", "Show deposit address"),
+            ("withdraw", "Withdraw USDC (usage: /withdraw <amount> <address>)"),
+        ]
+        await self.app.bot.set_my_commands(commands)
+        logger.info("🤖 Telegram bot started with commands")
 
     async def stop(self):
         """Stop the Telegram bot"""
