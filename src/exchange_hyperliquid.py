@@ -50,6 +50,8 @@ class HyperliquidClient:
         """Place market order (price param for API compatibility, not used)"""
         is_buy = side.lower() == "long"
         slippage = max_slippage_pct / 100
+        # Round size to 4 decimals to avoid Hyperliquid wire encoding errors
+        size = round(size, 4)
         print(f"🚨 LIVE TRADE: {side.upper()} {size:.4f} {symbol} with slippage {slippage*100:.1f}%")
         result = self.exchange.market_open(symbol, is_buy=is_buy, sz=size, px=None, slippage=slippage)
         print(f"📊 Order result: {result}")
@@ -58,6 +60,9 @@ class HyperliquidClient:
     def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.5, price: float = None) -> Dict[str, Any]:
         """Close position (price param for API compatibility, not used)"""
         slippage = max_slippage_pct / 100
+        # Round size to 4 decimals if provided
+        if size is not None:
+            size = round(size, 4)
         print(f"🚨 CLOSING: {symbol} position")
         result = self.exchange.market_close(symbol, sz=size, px=None, slippage=slippage)
         
