@@ -189,6 +189,12 @@ async def run_live_async():
 
         # Open new position - calculate actual size from position_fraction
         notional_value = equity * trade.position_fraction  # USD to allocate
+        
+        # Hyperliquid requires minimum $10 order value, use $11 to be safe
+        if notional_value < 11:
+            print(f"⚠️ Position size ${notional_value:.2f} below minimum ($11), increasing to $11")
+            notional_value = 11
+        
         size = notional_value / price  # Convert to ETH amount
         
         if use_paper:
