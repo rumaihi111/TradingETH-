@@ -13,21 +13,23 @@ class HyperliquidClient:
         testnet: bool = True,
         base_url_override: str = "",
         skip_ws: bool = True,
+        account_address: str = "",
     ):
         if private_key_hex.startswith("0x"):
             private_key_hex = private_key_hex
         self.wallet = Account.from_key(private_key_hex)
+        self.account_address = account_address or self.wallet.address
         base_url = base_url_override or (constants.TESTNET_API_URL if testnet else constants.MAINNET_API_URL)
         self.info = Info(base_url, skip_ws=skip_ws)
-        self.exchange = Exchange(self.wallet, base_url, account_address=self.wallet.address)
+        self.exchange = Exchange(self.wallet, base_url, account_address=self.account_address)
         
         # Note: Bot assumes 10x leverage - set this manually in Hyperliquid UI
         print("⚠️ IMPORTANT: Ensure your Hyperliquid account is set to 10x leverage (Cross Margin)")
 
     def account(self) -> Dict[str, Any]:
         """Get account state with equity"""
-        print(f"🔍 Querying wallet address: {self.wallet.address}")
-        state = self.info.user_state(self.wallet.address)
+        print(f"🔍 Querying account: {self.account_address} (via API wallet: {self.wallet.address})")
+        state = self.info.user_state(self.account_address)
         print(f"🔍 Raw marginSummary: {state.get('marginSummary', {})}")
         summary = state.get("marginSummary", {})
         equity = float(summary.get("accountValue", 0))

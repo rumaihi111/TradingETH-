@@ -32,6 +32,7 @@ async def run_live_async():
             private_key_hex=settings.private_key,
             testnet=settings.hyperliquid_testnet,
             base_url_override=settings.hyperliquid_base_url,
+            account_address=settings.account_address,
         )
     
     # Initialize P&L tracker with current wallet equity as baseline
