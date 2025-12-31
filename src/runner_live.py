@@ -205,16 +205,21 @@ async def run_live_async():
         else:
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct)
         
-        # Wait a moment for position to register on exchange
-        await asyncio.sleep(2)
+        # Wait up to 5 seconds for position to settle
+        print("⏳ Waiting for position to settle...")
+        position_found = False
+        for attempt in range(5):
+            await asyncio.sleep(1)
+            verification = ex.positions()
+            if verification and abs(verification[0].get('size', 0)) >= size * 0.9:
+                verified_pos = verification[0]
+                print(f"✅ Position verified: {trade.side.upper()} {abs(verified_pos.get('size', 0)):.4f} ETH @ ${verified_pos.get('entry_price', verified_pos.get('entry', 0)):.2f}")
+                position_found = True
+                break
         
-        # Verify position was opened
-        verification = ex.positions()
-        if verification:
-            verified_pos = verification[0]
-            print(f"✅ Position verified: {trade.side.upper()} {abs(verified_pos.get('size', 0)):.4f} ETH @ ${verified_pos.get('entry', 0):.2f}")
-        else:
-            print(f"⚠️ Warning: No position found after placing order. Result: {result}")
+        if not position_found:
+            print(f"⚠️ Warning: Position not found after {attempt + 1} attempts. Result: {result}")
+            print("⚠️ This could mean: order rejected, position too small, or immediate liquidation")
         
         # Record trade open
         pnl.record_trade("open", size, price)

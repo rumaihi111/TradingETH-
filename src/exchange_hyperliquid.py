@@ -98,11 +98,20 @@ class HyperliquidClient:
         print(f"🚨 CLOSING: {symbol} position")
         result = self.exchange.market_close(symbol, sz=size, px=None, slippage=slippage)
         
-        # Calculate PnL from result
-        if "status" in result and result.get("status") == "ok":
-            # Extract PnL if available
-            pnl = result.get("response", {}).get("data", {}).get("statuses", [{}])[0].get("filled", 0)
-            result["pnl"] = float(pnl) if pnl else 0
+        # Parse PNL correctly from response structure
+        pnl = 0
+        if isinstance(result, dict) and result.get("status") == "ok":
+            response_data = result.get("response", {})
+            if isinstance(response_data, dict):
+                data = response_data.get("data", {})
+                if isinstance(data, dict):
+                    statuses = data.get("statuses", [])
+                    if statuses and isinstance(statuses[0], dict):
+                        filled = statuses[0].get("filled", {})
+                        if isinstance(filled, dict):
+                            pnl = float(filled.get("closedPnl", 0))
         
-        print(f"📊 Close result: {result}")
+        result["pnl"] = pnl
+        print(f"📊 Close result: {result} (PnL: ${pnl:.2f})")
+        return result
         return result
