@@ -13,7 +13,6 @@ class HyperliquidClient:
         testnet: bool = True,
         base_url_override: str = "",
         skip_ws: bool = True,
-        target_leverage: int = 10,
     ):
         if private_key_hex.startswith("0x"):
             private_key_hex = private_key_hex
@@ -21,18 +20,9 @@ class HyperliquidClient:
         base_url = base_url_override or (constants.TESTNET_API_URL if testnet else constants.MAINNET_API_URL)
         self.info = Info(base_url, skip_ws=skip_ws)
         self.exchange = Exchange(self.wallet, base_url, account_address=self.wallet.address)
-        self.target_leverage = target_leverage
         
-        # Set leverage on initialization
-        self._set_leverage("ETH", target_leverage)
-    
-    def _set_leverage(self, symbol: str, leverage: int):
-        """Set leverage for a symbol (cross margin)"""
-        try:
-            result = self.exchange.update_leverage(leverage, symbol, is_cross=True)
-            print(f"🔧 Leverage set to {leverage}x for {symbol}: {result}")
-        except Exception as e:
-            print(f"⚠️ Could not set leverage: {e}")
+        # Note: Bot assumes 10x leverage - set this manually in Hyperliquid UI
+        print("⚠️ IMPORTANT: Ensure your Hyperliquid account is set to 10x leverage (Cross Margin)")
 
     def account(self) -> Dict[str, Any]:
         """Get account state with equity"""
