@@ -14,7 +14,7 @@ class Settings(BaseModel):
     rpc_url: str = Field("", alias="RPC_URL")
     wallet_address: str = Field("", alias="WALLET_ADDRESS")
     private_key: str = Field("", alias="PRIVATE_KEY")
-    trading_pair: str = Field("ETH-USDC")
+    trading_pair: str = Field("ETH")  # Hyperliquid uses just "ETH" not "ETH-USDC"
     max_position_fraction: float = Field(0.5, ge=0, le=1)
     max_trades_per_hour: int = Field(2, ge=0)
     cooldown_minutes: int = Field(30, ge=0)
