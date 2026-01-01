@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Withdraw funds from API wallet to main wallet"""
 
+import os
 import sys
 sys.path.insert(0, '/workspaces/TradingETH-')
 
-from src.config import load_settings
 from eth_account import Account
 from hyperliquid.exchange import Exchange
 from hyperliquid.info import Info
@@ -14,10 +14,14 @@ def main():
     print("💸 WITHDRAWING FROM API WALLET TO MAIN WALLET")
     print("=" * 70)
     
-    settings = load_settings()
+    # Get private key directly from env (bypass config)
+    private_key = os.getenv('PRIVATE_KEY')
+    if not private_key:
+        print("❌ ERROR: PRIVATE_KEY environment variable not set")
+        return
     
     # Setup API wallet
-    wallet = Account.from_key(settings.private_key)
+    wallet = Account.from_key(private_key)
     base_url = constants.MAINNET_API_URL
     info = Info(base_url, skip_ws=True)
     exchange = Exchange(wallet, base_url, account_address=wallet.address)
