@@ -101,42 +101,65 @@ class TradingTelegramBot:
     async def cmd_winrate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show overall win rate and stats"""
         try:
-            stats = self.pnl_tracker.get_stats()
+            account = self.hyperliquid.account()
+            current_equity = account.get("equity", 0)
+            stats = self.pnl_tracker.get_stats(current_equity)
             
             total_trades = stats["total_closed_trades"]
             winners = stats["winning_trades"]
             losers = stats["losing_trades"]
-            winrate = (winners / total_trades * 100) if total_trades > 0 else 0
+            winrate = stats["win_rate"]
             
             message = f"📊 **Trading Statistics**\n\n"
             message += f"Total Trades: {total_trades}\n"
             message += f"Winners: {winners} ({winrate:.1f}%)\n"
-            message += f"Losers: {losers}\n"
-            message += f"Avg Win: ${stats['avg_win']:.2f}\n"
-            message += f"Avg Loss: ${stats['avg_loss']:.2f}\n"
-            message += f"Best Trade: ${stats['largest_win']:.2f}\n"
-            message += f"Worst Trade: ${stats['largest_loss']:.2f}\n"
-            message += f"Total P&L: ${stats['total_pnl']:.2f}"
+            message += f"Losers: {losers}\n\n"
+            message += f"Avg Win: ${stats['avg_win']:+.2f}\n"
+            message += f"Avg Loss: ${stats['avg_loss']:+.2f}\n"
+            message += f"Best Trade: ${stats['largest_win']:+.2f}\n"
+            message += f"Worst Trade: ${stats['largest_loss']:+.2f}\n\n"
+            message += f"Total P&L: ${stats['total_pnl']:+.2f} ({stats['total_pnl_pct']:+.2f}%)"
             
-            await update.message.reply_text(message)
+            await update.message.reply_text(message, parse_mode='Markdown')
         except Exception as e:
             await update.message.reply_text(f"❌ Error: {e}")
 
     async def cmd_pnl(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Show current P&L report"""
+        """Show current P&L report with percentage from initial investment"""
         try:
             account = self.hyperliquid.account()
             equity = account.get("equity", 0)
-            stats = self.pnl_tracker.get_stats()
+            
+            # Get positions for unrealized P&L
+            positions = self.hyperliquid.positions()
+            unrealized_pnl = sum(p.get('unrealized_pnl', p.get('unrealized', 0)) for p in positions)
+            
+            # Get stats with current equity
+            stats = self.pnl_tracker.get_stats(equity)
+            
+            # Calculate total account value including unrealized
+            total_value = equity + unrealized_pnl
+            total_pnl = stats['total_pnl'] + unrealized_pnl
+            
+            # Calculate percentage from initial investment
+            initial = stats['starting_equity']
+            pnl_pct = (total_pnl / initial * 100) if initial > 0 else 0
             
             message = f"💵 **P&L Report**\n\n"
-            message += f"Starting Equity: ${stats['starting_equity']:.2f}\n"
+            message += f"Initial Investment: ${initial:.2f}\n"
             message += f"Current Equity: ${equity:.2f}\n"
-            message += f"Total P&L: ${stats['total_pnl']:.2f} ({stats['total_pnl_pct']:.2f}%)\n"
+            
+            if unrealized_pnl != 0:
+                message += f"Unrealized P&L: ${unrealized_pnl:+.2f}\n"
+                message += f"**Total Value: ${total_value:.2f}**\n\n"
+            else:
+                message += f"\n"
+            
+            message += f"**Total P&L: ${total_pnl:+.2f} ({pnl_pct:+.2f}%)**\n\n"
             message += f"Closed Trades: {stats['total_closed_trades']}\n"
             message += f"Win Rate: {stats['winning_trades']}/{stats['total_closed_trades']} ({stats['win_rate']:.1f}%)"
             
-            await update.message.reply_text(message)
+            await update.message.reply_text(message, parse_mode='Markdown')
         except Exception as e:
             await update.message.reply_text(f"❌ Error: {e}")
 
