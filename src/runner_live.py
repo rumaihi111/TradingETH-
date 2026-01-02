@@ -190,8 +190,8 @@ async def run_live_async():
             guard.record_close()
             await asyncio.sleep(5)
 
-        # Open new position - calculate actual size from position_fraction
-        notional_value = equity * trade.position_fraction  # USD to allocate
+        # Open new position - ALWAYS use max position fraction (ignore Claude's position_fraction)
+        notional_value = equity * settings.max_position_fraction  # Always use 80% of wallet
         
         # Hyperliquid requires minimum $10 order value, use $11 to be safe
         if notional_value < 11:
@@ -199,6 +199,8 @@ async def run_live_async():
             notional_value = 11
         
         size = notional_value / price  # Convert to ETH amount
+        
+        print(f"💰 Position sizing: ${notional_value:.2f} ({settings.max_position_fraction*100:.0f}% of ${equity:.2f})")
         
         if use_paper:
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct, price=price)
