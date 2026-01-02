@@ -231,23 +231,35 @@ class TradingTelegramBot:
     async def notify_trade_opened(self, side: str, size: float, price: float):
         """Send notification when trade is opened"""
         emoji = "📈" if side.lower() == "long" else "📉"
+        notional_value = size * price
+        
         message = f"{emoji} **TRADE OPENED**\n\n"
-        message += f"Side: {side.upper()}\n"
+        message += f"Direction: {side.upper()}\n"
         message += f"Size: {size:.4f} ETH\n"
-        message += f"Price: ${price:.2f}\n"
-        message += f"Time: {datetime.utcnow().strftime('%H:%M:%S UTC')}"
+        message += f"Entry Price: ${price:.2f}\n"
+        message += f"Position Value: ${notional_value:.2f}\n"
+        message += f"Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        
         await self.send_message(message)
 
     async def notify_trade_closed(self, side: str, size: float, entry: float, exit_price: float, pnl: float):
-        """Send notification when trade is closed"""
+        """Send notification when trade is closed with P&L"""
         emoji = "✅" if pnl > 0 else "❌"
-        message = f"{emoji} **TRADE CLOSED**\n\n"
-        message += f"Side: {side.upper()}\n"
-        message += f"Size: {size:.4f} ETH\n"
+        pnl_emoji = "💰" if pnl > 0 else "📉"
+        
+        # Calculate percentage P&L
+        entry_value = abs(size) * entry
+        pnl_pct = (pnl / entry_value * 100) if entry_value > 0 else 0
+        
+        message = f"{emoji} **TRADE CLOSED** {pnl_emoji}\n\n"
+        message += f"Direction: {side.upper()}\n"
+        message += f"Size: {abs(size):.4f} ETH\n"
         message += f"Entry: ${entry:.2f}\n"
         message += f"Exit: ${exit_price:.2f}\n"
-        message += f"P&L: ${pnl:.2f} ({(pnl/entry/abs(size)*100):.2f}%)\n"
-        message += f"Time: {datetime.utcnow().strftime('%H:%M:%S UTC')}"
+        message += f"Price Change: ${exit_price - entry:+.2f} ({(exit_price/entry - 1)*100:+.2f}%)\n\n"
+        message += f"**P&L: ${pnl:+.2f} ({pnl_pct:+.2f}%)**\n\n"
+        message += f"Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        
         await self.send_message(message)
 
     async def notify_neutral(self):
