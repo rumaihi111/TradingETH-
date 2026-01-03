@@ -54,17 +54,36 @@ async def run_live_async():
     
     guard = FrequencyGuard(settings.max_trades_per_hour, settings.cooldown_minutes)
     spot = ccxt.kucoin()
+    rate_limit_backoff = 60  # Start with 60 second backoff on rate limit
 
     while True:
-        # Fetch latest 5m candles for Claude analysis
-        ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=50)
-        candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
-        price = candles[-1]["close"]
+        try:
+            # Fetch latest 5m candles for Claude analysis
+            ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=50)
+            candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
+            price = candles[-1]["close"]
+            
+            # Get current positions ONCE at start of loop
+            account = ex.account()
+            equity = account.get("equity", 0)
+            open_positions = ex.positions()
+            
+            # Reset backoff on successful query
+            rate_limit_backoff = 60
         
-        # Get current positions ONCE at start of loop
-        account = ex.account()
-        equity = account.get("equity", 0)
-        open_positions = ex.positions()
+        except Exception as e:
+            # Handle rate limit errors (429) from Hyperliquid
+            error_str = str(e)
+            if "429" in error_str or "rate" in error_str.lower():
+                print(f"⚠️ Rate limit hit, backing off for {rate_limit_backoff}s...")
+                await asyncio.sleep(rate_limit_backoff)
+                rate_limit_backoff = min(rate_limit_backoff * 2, 600)  # Max 10 min backoff
+                continue
+            else:
+                # Other errors - log and retry after 5 minutes
+                print(f"❌ Error querying exchange: {e}")
+                await asyncio.sleep(300)
+                continue
         
         # Log position status
         if open_positions:
