@@ -16,7 +16,7 @@ class Settings(BaseModel):
     private_key: str = Field("", alias="PRIVATE_KEY")
     account_address: str = Field("", alias="ACCOUNT_ADDRESS")  # Main wallet that API wallet trades for
     trading_pair: str = Field("ETH")  # Hyperliquid uses just "ETH" not "ETH-USDC"
-    max_position_fraction: float = Field(0.5, ge=0, le=1)
+    max_position_fraction: float = Field(0.8, ge=0, le=1, alias="MAX_POSITION_FRACTION")
     max_trades_per_hour: int = Field(2, ge=0)
     cooldown_minutes: int = Field(30, ge=0)
     paper_mode: bool = Field(False, alias="PAPER_MODE")
