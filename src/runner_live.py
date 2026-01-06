@@ -185,27 +185,40 @@ async def run_live_async():
         # Close opposite position before opening new
         if current_pos and current_side != trade.side:
             ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
-            close_price = ohlcv_close[0][4]
+            market_price = ohlcv_close[0][4]
             if use_paper:
-                close_result = ex.close_position(settings.trading_pair, price=close_price)
+                close_result = ex.close_position(settings.trading_pair, price=market_price)
             else:
                 close_result = ex.close_position(settings.trading_pair)
             
-            # Record P&L
-            if "pnl" in close_result:
-                pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, close_result["pnl"])
-                # Send Telegram notification
-                if telegram_bot:
-                    await telegram_bot.notify_trade_closed(
-                        current_side,
-                        abs(current_pos.get("size", 0)),
-                        current_pos.get("entry", 0),
-                        close_price,
-                        close_result["pnl"]
-                    )
+            # Get actual close price from result or use market price
+            close_price = close_result.get("close_price") or market_price
             
-            trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
-            print(f"Signal: {trade.side} → Closed {current_side} position @ {close_price} (flipping)")
+            # Record P&L (use result PNL if available, otherwise calculate)
+            pnl_value = close_result.get("pnl", 0)
+            if pnl_value == 0:
+                # Calculate manually if not provided
+                entry = current_pos.get("entry", 0)
+                size = abs(current_pos.get("size", 0))
+                if current_side.lower() == "long":
+                    pnl_value = (close_price - entry) * size
+                else:
+                    pnl_value = (entry - close_price) * size
+            
+            pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, pnl_value)
+            
+            # Send Telegram notification
+            if telegram_bot:
+                await telegram_bot.notify_trade_closed(
+                    current_side,
+                    abs(current_pos.get("size", 0)),
+                    current_pos.get("entry", 0),
+                    close_price,
+                    pnl_value
+                )
+            
+            trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price, "pnl": pnl_value})
+            print(f"Signal: {trade.side} → Closed {current_side} position @ ${close_price:.2f} (P&L: ${pnl_value:+.2f})")
             guard.record_close()
             await asyncio.sleep(5)
 

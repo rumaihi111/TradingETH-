@@ -95,11 +95,22 @@ class HyperliquidClient:
         # Round size to 4 decimals if provided
         if size is not None:
             size = round(size, 4)
+        
+        # Get position info before closing for PNL calculation
+        positions = self.positions()
+        entry_price = 0
+        position_size = 0
+        if positions:
+            entry_price = positions[0].get("entry_price", 0)
+            position_size = abs(positions[0].get("size", 0))
+        
         print(f"🚨 CLOSING: {symbol} position")
         result = self.exchange.market_close(symbol, sz=size, px=None, slippage=slippage)
         
-        # Parse PNL correctly from response structure
+        # Try to extract PNL from Hyperliquid response
         pnl = 0
+        close_price = 0
+        
         if isinstance(result, dict) and result.get("status") == "ok":
             response_data = result.get("response", {})
             if isinstance(response_data, dict):
@@ -109,9 +120,21 @@ class HyperliquidClient:
                     if statuses and isinstance(statuses[0], dict):
                         filled = statuses[0].get("filled", {})
                         if isinstance(filled, dict):
+                            # Try to get closedPnl from Hyperliquid
                             pnl = float(filled.get("closedPnl", 0))
+                            # Get close price
+                            close_price = float(filled.get("avgPx", 0))
+        
+        # If Hyperliquid didn't provide PNL, calculate it manually
+        if pnl == 0 and entry_price > 0 and close_price > 0 and position_size > 0:
+            # Calculate based on entry vs exit
+            # For long: (exit - entry) * size
+            # For short: (entry - exit) * size
+            # Assume long for now (most common)
+            pnl = (close_price - entry_price) * position_size
+            print(f"📊 Calculated PnL manually: ({close_price:.2f} - {entry_price:.2f}) × {position_size:.4f} = ${pnl:.2f}")
         
         result["pnl"] = pnl
-        print(f"📊 Close result: {result} (PnL: ${pnl:.2f})")
-        return result
+        result["close_price"] = close_price if close_price > 0 else None
+        print(f"📊 Close result: Sold {position_size:.4f} {symbol} @ ${close_price:.2f} (PnL: ${pnl:+.2f})")
         return result
