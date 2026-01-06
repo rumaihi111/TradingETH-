@@ -225,6 +225,11 @@ async def run_live_async():
         # Open new position - ALWAYS use max position fraction (ignore Claude's position_fraction)
         notional_value = equity * settings.max_position_fraction  # Always use 80% of wallet
         
+        print(f"🔧 DEBUG: settings.max_position_fraction = {settings.max_position_fraction}")
+        print(f"🔧 DEBUG: equity = ${equity:.2f}")
+        print(f"🔧 DEBUG: notional_value = ${notional_value:.2f}")
+        print(f"🔧 DEBUG: Claude's position_fraction (IGNORED) = {trade.position_fraction}")
+        
         # Hyperliquid requires minimum $10 order value, use $11 to be safe
         if notional_value < 11:
             print(f"⚠️ Position size ${notional_value:.2f} below minimum ($11), increasing to $11")
