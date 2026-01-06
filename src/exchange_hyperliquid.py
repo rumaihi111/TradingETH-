@@ -89,6 +89,41 @@ class HyperliquidClient:
         print(f"📊 Order result: {result}")
         return result
 
+    def place_trigger_order(self, symbol: str, side: str, size: float, trigger_price: float, is_stop: bool = True, reduce_only: bool = True) -> Dict[str, Any]:
+        """Place stop loss or take profit trigger order
+        
+        Args:
+            symbol: Trading pair (e.g., 'ETH')
+            side: 'buy' or 'sell' - opposite of position direction
+            size: Size in base currency (e.g., ETH amount)
+            trigger_price: Price at which order triggers
+            is_stop: True for stop loss, False for take profit
+            reduce_only: True to only close positions, not open new ones
+        """
+        is_buy = side.lower() == "buy"
+        size = round(size, 4)
+        trigger_price = round(trigger_price, 2)
+        
+        # Hyperliquid trigger order structure
+        order_type = {"trigger": {"triggerPx": str(trigger_price), "isMarket": True, "tpsl": "tp" if not is_stop else "sl"}}
+        
+        print(f"🎯 Placing {'Stop Loss' if is_stop else 'Take Profit'}: {side.upper()} {size:.4f} {symbol} @ ${trigger_price:.2f}")
+        
+        try:
+            result = self.exchange.order(
+                symbol,
+                is_buy=is_buy,
+                sz=size,
+                limit_px=trigger_price,
+                order_type=order_type,
+                reduce_only=reduce_only
+            )
+            print(f"✅ Trigger order placed: {result}")
+            return result
+        except Exception as e:
+            print(f"❌ Failed to place trigger order: {e}")
+            return {"status": "error", "error": str(e)}
+
     def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.5, price: float = None) -> Dict[str, Any]:
         """Close position (price param for API compatibility, not used)"""
         slippage = max_slippage_pct / 100

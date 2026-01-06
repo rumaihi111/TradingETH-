@@ -270,6 +270,54 @@ async def run_live_async():
         trade_log.log_trade({"decision": trade.model_dump(), "result": result, "price": price})
         guard.record_open()
         print(f"Trade placed: {trade.side} {size:.4f} ETH (${notional_value:.2f}) @ ${price:.2f}, result={result}")
+        
+        # Place stop loss and take profit if Claude provided them
+        if not use_paper and position_found and (trade.stop_loss_pct > 0 or trade.take_profit_pct > 0):
+            print(f"\n🛡️ Setting up risk management (SL: {trade.stop_loss_pct*100:.1f}%, TP: {trade.take_profit_pct*100:.1f}%)")
+            
+            # Get actual entry price from verified position
+            entry_price = verified_pos.get('entry_price', verified_pos.get('entry', price))
+            actual_size = abs(verified_pos.get('size', size))
+            
+            # Place stop loss
+            if trade.stop_loss_pct > 0:
+                if trade.side.lower() == "long":
+                    stop_price = entry_price * (1 - trade.stop_loss_pct)
+                    stop_side = "sell"
+                else:  # short
+                    stop_price = entry_price * (1 + trade.stop_loss_pct)
+                    stop_side = "buy"
+                
+                ex.place_trigger_order(
+                    symbol=settings.trading_pair,
+                    side=stop_side,
+                    size=actual_size,
+                    trigger_price=stop_price,
+                    is_stop=True,
+                    reduce_only=True
+                )
+                print(f"🛡️ Stop Loss: {stop_side.upper()} {actual_size:.4f} ETH @ ${stop_price:.2f} (-{trade.stop_loss_pct*100:.1f}% from ${entry_price:.2f})")
+            
+            # Place take profit
+            if trade.take_profit_pct > 0:
+                if trade.side.lower() == "long":
+                    tp_price = entry_price * (1 + trade.take_profit_pct)
+                    tp_side = "sell"
+                else:  # short
+                    tp_price = entry_price * (1 - trade.take_profit_pct)
+                    tp_side = "buy"
+                
+                ex.place_trigger_order(
+                    symbol=settings.trading_pair,
+                    side=tp_side,
+                    size=actual_size,
+                    trigger_price=tp_price,
+                    is_stop=False,
+                    reduce_only=True
+                )
+                print(f"🎯 Take Profit: {tp_side.upper()} {actual_size:.4f} ETH @ ${tp_price:.2f} (+{trade.take_profit_pct*100:.1f}% from ${entry_price:.2f})")
+            
+            print(f"✅ Risk management orders placed successfully\n")
 
         # Wait cooldown before next signal
         await asyncio.sleep(settings.cooldown_minutes * 60)

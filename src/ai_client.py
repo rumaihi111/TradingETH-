@@ -49,7 +49,25 @@ TRADING RULES:
 - Trade max 2 times per hour with a 30 minute interval break per trade.
 - Trade on 5 min chart only.
 
-Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fields: side in {long, short, flat}, position_fraction (0-0.5), stop_loss_pct, take_profit_pct, max_slippage_pct. Keep trades sparse and avoid overtrading.
+RISK MANAGEMENT:
+- Always set stop_loss_pct (recommended: 0.03-0.08 = 3-8% from entry)
+- Always set take_profit_pct (recommended: 0.08-0.15 = 8-15% from entry)
+- With 10x leverage, a 5% stop loss = 50% of position at risk
+- Risk/Reward: Take profit should be 1.5x-3x stop loss distance
+- Tighter stops (3-5%) for choppy markets, wider stops (6-8%) for trending markets
+- Set stops based on support/resistance levels, not arbitrary percentages
+
+Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fields: 
+- side: "long", "short", or "flat"
+- position_fraction: 0-0.5 (IGNORED - bot uses max_position_fraction from config)
+- stop_loss_pct: decimal (e.g., 0.05 = 5% stop loss from entry)
+- take_profit_pct: decimal (e.g., 0.10 = 10% take profit from entry)
+- max_slippage_pct: decimal (e.g., 0.5 = 0.5% max slippage)
+
+Example responses:
+{"side": "long", "position_fraction": 0.2, "stop_loss_pct": 0.04, "take_profit_pct": 0.10, "max_slippage_pct": 0.5}
+{"side": "short", "position_fraction": 0.2, "stop_loss_pct": 0.05, "take_profit_pct": 0.12, "max_slippage_pct": 0.5}
+{"side": "flat", "position_fraction": 0, "stop_loss_pct": 0, "take_profit_pct": 0, "max_slippage_pct": 0.5}
 
 CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown. Just the raw JSON."""
         payload = {
