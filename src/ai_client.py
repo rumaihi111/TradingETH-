@@ -2,6 +2,9 @@ import httpx
 import base64
 from typing import Any, Dict, List, Optional
 from io import BytesIO
+import pandas as pd
+import mplfinance as mpf
+from datetime import datetime
 
 from .history_store import HistoryStore
 
@@ -19,31 +22,45 @@ class AISignalClient:
         self.history_store = history_store
         self.history_hours = history_hours
 
-    def _get_chart_image(self) -> Optional[str]:
-        """Fetch ETH 5-minute chart from TradingView and return base64 encoded image"""
+    def _get_chart_image(self, candles: List[Dict[str, Any]]) -> Optional[str]:
+        """Generate candlestick chart from candle data and return base64 encoded image"""
         try:
-            # Using TradingView chart image API
-            # This generates a fresh chart snapshot
-            symbol = "COINBASE:ETHUSD"
-            interval = "5"  # 5 minute
-            width = "1200"
-            height = "600"
+            # Convert candles to DataFrame for mplfinance
+            df_data = []
+            for candle in candles:
+                df_data.append({
+                    'Date': datetime.fromtimestamp(candle['time'] / 1000),
+                    'Open': float(candle['open']),
+                    'High': float(candle['high']),
+                    'Low': float(candle['low']),
+                    'Close': float(candle['close']),
+                    'Volume': float(candle['volume'])
+                })
             
-            # TradingView image export service (public endpoint)
-            chart_url = f"https://api.chart-img.com/v1/tradingview/advanced-chart?symbol={symbol}&interval={interval}&width={width}&height={height}&theme=dark&studies=&timezone=America/New_York"
+            df = pd.DataFrame(df_data)
+            df.set_index('Date', inplace=True)
             
-            print(f"📸 Fetching chart from: {chart_url}")
+            # Create chart
+            buf = BytesIO()
+            mpf.plot(
+                df,
+                type='candle',
+                style='charles',
+                title='ETH/USDC 5-Minute Chart',
+                ylabel='Price (USDC)',
+                volume=True,
+                figsize=(14, 8),
+                savefig=dict(fname=buf, dpi=100, bbox_inches='tight')
+            )
             
-            with httpx.Client(timeout=15) as client:
-                response = client.get(chart_url)
-                response.raise_for_status()
-                
-                # Encode image to base64
-                image_b64 = base64.b64encode(response.content).decode('utf-8')
-                print(f"✅ Chart image fetched successfully ({len(response.content)} bytes)")
-                return image_b64
+            # Encode to base64
+            buf.seek(0)
+            image_b64 = base64.b64encode(buf.read()).decode('utf-8')
+            print(f"✅ Chart image generated successfully ({len(image_b64)} chars)")
+            return image_b64
+            
         except Exception as e:
-            print(f"⚠️ Failed to fetch chart image: {e}")
+            print(f"⚠️ Failed to generate chart image: {e}")
             print(f"   Falling back to text-based analysis")
             return None
 
@@ -104,8 +121,8 @@ Example: {"side": "long", "position_fraction": 0.8, "stop_loss_pct": 0.04, "take
 
 CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown."""
 
-        # Fetch chart image for visual analysis
-        chart_image = self._get_chart_image()
+        # Generate chart image from candle data for visual analysis
+        chart_image = self._get_chart_image(candles)
         
         # Build user message with image + text prompt
         user_content = []
