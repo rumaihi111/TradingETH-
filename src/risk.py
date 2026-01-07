@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class TradeDecision(BaseModel):
     side: str  # long, short, flat
-    position_fraction: float = Field(0, ge=0, le=0.5)
+    position_fraction: float = Field(0, ge=0, le=1)  # Ignored - bot uses max_position_fraction from config
     stop_loss_pct: float = Field(0)  # can be negative (below entry)
     take_profit_pct: float = Field(0)  # can be negative for shorts
     max_slippage_pct: float = Field(0.5, ge=0)
