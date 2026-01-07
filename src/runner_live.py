@@ -170,10 +170,8 @@ async def run_live_async():
             await asyncio.sleep(300)
             continue
 
-        if trade.position_fraction <= 0:
-            print(f"Signal: {trade.side} with 0 size → Ignoring")
-            await asyncio.sleep(300)
-            continue
+        # Note: We IGNORE trade.position_fraction - always use settings.max_position_fraction (80%)
+        # Claude's position_fraction is informational only
 
         # Check if we need to flip or can hold existing position
         if current_pos and current_side == trade.side:

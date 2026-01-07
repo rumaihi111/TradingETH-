@@ -59,14 +59,17 @@ RISK MANAGEMENT:
 
 Given recent 5m candles for ETH/USDC and recent decisions, return a JSON with fields: 
 - side: "long", "short", or "flat"
-- position_fraction: 0-0.5 (IGNORED - bot uses max_position_fraction from config)
+- position_fraction: IGNORED BY BOT (always uses 80% of wallet balance)
 - stop_loss_pct: decimal (e.g., 0.05 = 5% stop loss from entry)
 - take_profit_pct: decimal (e.g., 0.10 = 10% take profit from entry)
 - max_slippage_pct: decimal (e.g., 0.5 = 0.5% max slippage)
 
+IMPORTANT: The bot ALWAYS uses 80% of current wallet balance for position sizing.
+Your position_fraction field is IGNORED. Just return any value (e.g., 0.8) for it.
+
 Example responses:
-{"side": "long", "position_fraction": 0.2, "stop_loss_pct": 0.04, "take_profit_pct": 0.10, "max_slippage_pct": 0.5}
-{"side": "short", "position_fraction": 0.2, "stop_loss_pct": 0.05, "take_profit_pct": 0.12, "max_slippage_pct": 0.5}
+{"side": "long", "position_fraction": 0.8, "stop_loss_pct": 0.04, "take_profit_pct": 0.10, "max_slippage_pct": 0.5}
+{"side": "short", "position_fraction": 0.8, "stop_loss_pct": 0.05, "take_profit_pct": 0.12, "max_slippage_pct": 0.5}
 {"side": "flat", "position_fraction": 0, "stop_loss_pct": 0, "take_profit_pct": 0, "max_slippage_pct": 0.5}
 
 CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown. Just the raw JSON."""
