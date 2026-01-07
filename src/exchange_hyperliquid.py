@@ -101,20 +101,21 @@ class HyperliquidClient:
             reduce_only: True to only close positions, not open new ones
         """
         is_buy = side.lower() == "buy"
-        size = float(round(size, 4))
-        trigger_price = float(round(trigger_price, 2))
+        # Hyperliquid SDK expects strings for numeric values
+        sz_str = str(round(float(size), 4))
+        px_str = str(round(float(trigger_price), 2))
         
         # Hyperliquid trigger order structure
-        order_type = {"trigger": {"triggerPx": str(trigger_price), "isMarket": True, "tpsl": "tp" if not is_stop else "sl"}}
+        order_type = {"trigger": {"triggerPx": px_str, "isMarket": True, "tpsl": "tp" if not is_stop else "sl"}}
         
-        print(f"🎯 Placing {'Stop Loss' if is_stop else 'Take Profit'}: {side.upper()} {size} {symbol} @ ${trigger_price}")
+        print(f"🎯 Placing {'Stop Loss' if is_stop else 'Take Profit'}: {side.upper()} {sz_str} {symbol} @ ${px_str}")
         
         try:
             result = self.exchange.order(
                 symbol,
                 is_buy=is_buy,
-                sz=size,
-                limit_px=trigger_price,
+                sz=float(sz_str),  # SDK needs float
+                limit_px=float(px_str),  # SDK needs float
                 order_type=order_type,
                 reduce_only=reduce_only
             )
@@ -122,6 +123,8 @@ class HyperliquidClient:
             return result
         except Exception as e:
             print(f"❌ Failed to place trigger order: {e}")
+            import traceback
+            traceback.print_exc()
             return {"status": "error", "error": str(e)}
 
     def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.5, price: float = None) -> Dict[str, Any]:
