@@ -28,8 +28,10 @@ class AISignalClient:
             # Convert candles to DataFrame for mplfinance
             df_data = []
             for candle in candles:
+                # Support both 'ts' and 'time' keys for timestamp
+                timestamp = candle.get('ts', candle.get('time', 0))
                 df_data.append({
-                    'Date': datetime.fromtimestamp(candle['time'] / 1000),
+                    'Date': datetime.fromtimestamp(timestamp / 1000),
                     'Open': float(candle['open']),
                     'High': float(candle['high']),
                     'Low': float(candle['low']),
