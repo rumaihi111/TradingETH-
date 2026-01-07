@@ -22,23 +22,29 @@ class AISignalClient:
     def _get_chart_image(self) -> Optional[str]:
         """Fetch ETH 5-minute chart from TradingView and return base64 encoded image"""
         try:
-            # TradingView chart snapshot URL (5-minute ETH/USDT)
-            chart_url = "https://s3.tradingview.com/snapshots/u/uHjQKZME.png"
+            # Using TradingView chart image API
+            # This generates a fresh chart snapshot
+            symbol = "COINBASE:ETHUSD"
+            interval = "5"  # 5 minute
+            width = "1200"
+            height = "600"
             
-            # Alternative: Generate chart URL dynamically
-            # symbol = "COINBASE:ETHUSD"
-            # interval = "5"
-            # chart_url = f"https://api.chart-img.com/v1/tradingview/advanced-chart?symbol={symbol}&interval={interval}&studies=&width=800&height=400"
+            # TradingView image export service (public endpoint)
+            chart_url = f"https://api.chart-img.com/v1/tradingview/advanced-chart?symbol={symbol}&interval={interval}&width={width}&height={height}&theme=dark&studies=&timezone=America/New_York"
             
-            with httpx.Client(timeout=10) as client:
+            print(f"📸 Fetching chart from: {chart_url}")
+            
+            with httpx.Client(timeout=15) as client:
                 response = client.get(chart_url)
                 response.raise_for_status()
                 
                 # Encode image to base64
                 image_b64 = base64.b64encode(response.content).decode('utf-8')
+                print(f"✅ Chart image fetched successfully ({len(response.content)} bytes)")
                 return image_b64
         except Exception as e:
             print(f"⚠️ Failed to fetch chart image: {e}")
+            print(f"   Falling back to text-based analysis")
             return None
 
     def fetch_signal(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
