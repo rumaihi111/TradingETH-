@@ -101,13 +101,13 @@ class HyperliquidClient:
             reduce_only: True to only close positions, not open new ones
         """
         is_buy = side.lower() == "buy"
-        size = round(size, 4)
-        trigger_price = round(trigger_price, 2)
+        size = float(round(size, 4))
+        trigger_price = float(round(trigger_price, 2))
         
         # Hyperliquid trigger order structure
         order_type = {"trigger": {"triggerPx": str(trigger_price), "isMarket": True, "tpsl": "tp" if not is_stop else "sl"}}
         
-        print(f"🎯 Placing {'Stop Loss' if is_stop else 'Take Profit'}: {side.upper()} {size:.4f} {symbol} @ ${trigger_price:.2f}")
+        print(f"🎯 Placing {'Stop Loss' if is_stop else 'Take Profit'}: {side.upper()} {size} {symbol} @ ${trigger_price}")
         
         try:
             result = self.exchange.order(
