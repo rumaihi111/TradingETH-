@@ -1,5 +1,7 @@
 import httpx
+import base64
 from typing import Any, Dict, List, Optional
+from io import BytesIO
 
 from .history_store import HistoryStore
 
@@ -16,6 +18,28 @@ class AISignalClient:
         self.endpoint = endpoint
         self.history_store = history_store
         self.history_hours = history_hours
+
+    def _get_chart_image(self) -> Optional[str]:
+        """Fetch ETH 5-minute chart from TradingView and return base64 encoded image"""
+        try:
+            # TradingView chart snapshot URL (5-minute ETH/USDT)
+            chart_url = "https://s3.tradingview.com/snapshots/u/uHjQKZME.png"
+            
+            # Alternative: Generate chart URL dynamically
+            # symbol = "COINBASE:ETHUSD"
+            # interval = "5"
+            # chart_url = f"https://api.chart-img.com/v1/tradingview/advanced-chart?symbol={symbol}&interval={interval}&studies=&width=800&height=400"
+            
+            with httpx.Client(timeout=10) as client:
+                response = client.get(chart_url)
+                response.raise_for_status()
+                
+                # Encode image to base64
+                image_b64 = base64.b64encode(response.content).decode('utf-8')
+                return image_b64
+        except Exception as e:
+            print(f"⚠️ Failed to fetch chart image: {e}")
+            return None
 
     def fetch_signal(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not self.api_key:
@@ -49,7 +73,10 @@ TRADING RULES:
 - Max open trades at once is 1.
 - Compound the money.
 - Trade max 2 times per hour with a 30 minute interval break per trade.
-- Trade on 5 min chart only.
+- Analyze 5-minute ETH/USDC charts using visual pattern recognition.
+- Look for chart patterns: triangles, flags, head & shoulders, double tops/bottoms, wedges.
+- Identify key support/resistance levels visually.
+- Use candlestick patterns: engulfing, doji, hammers, shooting stars.
 
 RISK MANAGEMENT:
 - Always set stop_loss_pct (recommended: 0.03-0.08 = 3-8% from entry)
@@ -71,8 +98,45 @@ Example: {"side": "long", "position_fraction": 0.8, "stop_loss_pct": 0.04, "take
 
 CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown."""
 
-        # USER PROMPT (Market Data for Analysis)
-        user_prompt = f"""Analyze the following 5-minute chart data for ETH/USDC and make a trading decision.
+        # Fetch chart image for visual analysis
+        chart_image = self._get_chart_image()
+        
+        # Build user message with image + text prompt
+        user_content = []
+        
+        if chart_image:
+            # Add image first
+            user_content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": chart_image
+                }
+            })
+            
+            # Text prompt for visual analysis
+            text_prompt = f"""Analyze this 5-minute ETH/USDC chart image and make a trading decision.
+
+📊 VISUAL ANALYSIS:
+- Identify chart patterns (triangles, flags, head & shoulders, etc.)
+- Locate key support and resistance levels
+- Observe trend direction and momentum
+- Check volume patterns and divergences
+- Look for candlestick patterns (engulfing, doji, hammers, etc.)
+
+📋 YOUR RECENT DECISIONS (Last 3 hours):
+{self._format_recent_decisions(recent_decisions)}
+
+Based on your visual chart analysis:
+- Set appropriate stop loss (3-8% from entry recommended)
+- Set take profit target (5-15% recommended)
+- Consider recent trading history to avoid overtrading
+
+Return your trading decision as JSON:"""
+        else:
+            # Fallback to text-based analysis if image fails
+            text_prompt = f"""Analyze the following 5-minute chart data for ETH/USDC and make a trading decision.
 
 📊 5-MINUTE CANDLES (Most recent last):
 {self._format_candles(candles)}
@@ -87,13 +151,18 @@ Based on this 5-minute chart analysis:
 - Set appropriate stop loss and take profit levels
 
 Return your trading decision as JSON:"""
+        
+        user_content.append({
+            "type": "text",
+            "text": text_prompt
+        })
 
         payload = {
             "model": "claude-3-haiku-20240307",
             "max_tokens": 256,
             "system": system_prompt,  # System prompt (cached by Claude)
             "messages": [
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_content}
             ],
         }
         headers = {
