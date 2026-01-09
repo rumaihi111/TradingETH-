@@ -228,17 +228,77 @@ class TradingTelegramBot:
             await update.message.reply_text(f"❌ Error: {e}")
 
     # Notification Methods
-    async def notify_trade_opened(self, side: str, size: float, price: float):
-        """Send notification when trade is opened"""
+    async def notify_trade_opened(self, side: str, size: float, price: float, stop_loss: float = None, take_profit: float = None, leverage: int = 10):
+        """Send notification when trade is opened with stop loss and take profit details"""
         emoji = "📈" if side.lower() == "long" else "📉"
         notional_value = size * price
+        margin_used = notional_value / leverage
         
-        message = f"{emoji} **TRADE OPENED**\n\n"
-        message += f"Direction: {side.upper()}\n"
-        message += f"Size: {size:.4f} ETH\n"
-        message += f"Entry Price: ${price:.2f}\n"
-        message += f"Position Value: ${notional_value:.2f}\n"
-        message += f"Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        message = f"{emoji} **TRADE OPENED** {emoji}\n\n"
+        message += f"**Direction:** {side.upper()}\n"
+        message += f"**Entry Price:** ${price:.2f}\n"
+        message += f"**Size:** {size:.4f} ETH\n"
+        message += f"**Leverage:** {leverage}x\n"
+        message += f"**Position Value:** ${notional_value:.2f}\n"
+        message += f"**Margin Used:** ${margin_used:.2f}\n\n"
+        
+        # Add Stop Loss and Take Profit if provided
+        if stop_loss:
+            sl_distance = abs(price - stop_loss)
+            sl_pct = (sl_distance / price) * 100
+            message += f"🛑 **Stop Loss:** ${stop_loss:.2f}\n"
+            message += f"   Distance: ${sl_distance:.2f} ({sl_pct:.2f}%)\n"
+            message += f"   Max Loss: ${margin_used * (sl_pct/100) * leverage:.2f}\n\n"
+        
+        if take_profit:
+            tp_distance = abs(take_profit - price)
+            tp_pct = (tp_distance / price) * 100
+            message += f"🎯 **Take Profit:** ${take_profit:.2f}\n"
+            message += f"   Distance: ${tp_distance:.2f} ({tp_pct:.2f}%)\n"
+            message += f"   Expected Profit: ${margin_used * (tp_pct/100) * leverage:.2f}\n\n"
+        
+        if stop_loss and take_profit:
+            risk_reward = tp_distance / sl_distance if sl_distance > 0 else 0
+            message += f"⚖️ **Risk/Reward:** 1:{risk_reward:.2f}\n\n"
+        
+        message += f"🕐 Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+        message += f"_Target timeframe: 30-60 minutes_"
+        
+        await self.send_message(message)
+    
+    async def notify_position_update(self, side: str, size: float, entry: float, current_price: float, unrealized_pnl: float):
+        """Send periodic position update with current P&L"""
+        emoji = "📈" if side.lower() == "long" else "📉"
+        pnl_emoji = "💚" if unrealized_pnl > 0 else "❤️" if unrealized_pnl < 0 else "💛"
+        
+        price_change = current_price - entry
+        price_change_pct = (price_change / entry) * 100
+        
+        message = f"{emoji} **POSITION UPDATE** {pnl_emoji}\n\n"
+        message += f"**Direction:** {side.upper()}\n"
+        message += f"**Entry:** ${entry:.2f}\n"
+        message += f"**Current:** ${current_price:.2f}\n"
+        message += f"**Price Δ:** ${price_change:+.2f} ({price_change_pct:+.2f}%)\n\n"
+        message += f"**Unrealized P&L:** ${unrealized_pnl:+.2f}\n"
+        message += f"Time: {datetime.utcnow().strftime('%H:%M:%S UTC')}"
+        
+        await self.send_message(message)
+    
+    async def notify_signal_received(self, signal: str, rsi: float, confidence: float):
+        """Notify when trading signal is received from AI"""
+        emoji_map = {
+            "long": "🟢",
+            "short": "🔴",
+            "flat": "⚪",
+            "neutral": "⚪"
+        }
+        emoji = emoji_map.get(signal.lower(), "⚪")
+        
+        message = f"{emoji} **SIGNAL RECEIVED** {emoji}\n\n"
+        message += f"**Direction:** {signal.upper()}\n"
+        message += f"**RSI:** {rsi:.2f}\n"
+        message += f"**Confidence:** {confidence:.1%}\n"
+        message += f"Time: {datetime.utcnow().strftime('%H:%M:%S UTC')}"
         
         await self.send_message(message)
 

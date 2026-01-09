@@ -261,9 +261,31 @@ async def run_live_async():
         # Record trade open
         pnl.record_trade("open", size, price)
         
-        # Send Telegram notification for opened trade
+        # Calculate SL and TP prices for notification
+        stop_loss_price = None
+        take_profit_price = None
+        if trade.stop_loss_pct > 0:
+            if trade.side.lower() == "long":
+                stop_loss_price = price * (1 - trade.stop_loss_pct)
+            else:
+                stop_loss_price = price * (1 + trade.stop_loss_pct)
+        
+        if trade.take_profit_pct > 0:
+            if trade.side.lower() == "long":
+                take_profit_price = price * (1 + trade.take_profit_pct)
+            else:
+                take_profit_price = price * (1 - trade.take_profit_pct)
+        
+        # Send Telegram notification for opened trade with SL/TP details
         if telegram_bot:
-            await telegram_bot.notify_trade_opened(trade.side, size, price)
+            await telegram_bot.notify_trade_opened(
+                trade.side, 
+                size, 
+                price,
+                stop_loss=stop_loss_price,
+                take_profit=take_profit_price,
+                leverage=10  # 10x leverage as per requirements
+            )
         
         trade_log.log_trade({"decision": trade.model_dump(), "result": result, "price": price})
         guard.record_open()
