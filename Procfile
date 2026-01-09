@@ -1,1 +1,1 @@
-worker: python -m src.runner_live
+worker: python start.py
