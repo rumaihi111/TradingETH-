@@ -17,8 +17,8 @@ class Settings(BaseModel):
     account_address: str = Field("", alias="ACCOUNT_ADDRESS")  # Main wallet that API wallet trades for
     trading_pair: str = Field("ETH")  # Hyperliquid uses just "ETH" not "ETH-USDC"
     max_position_fraction: float = Field(0.8, ge=0, le=1, alias="MAX_POSITION_FRACTION")
-    max_trades_per_hour: int = Field(2, ge=0)
-    cooldown_minutes: int = Field(30, ge=0)
+    max_trades_per_hour: int = Field(45, ge=0)
+    cooldown_minutes: int = Field(0, ge=0)
     paper_mode: bool = Field(False, alias="PAPER_MODE")
     paper_initial_equity: float = Field(10000.0, ge=0, alias="PAPER_INITIAL_EQUITY")
     telegram_token: str = Field("", alias="TELEGRAM_TOKEN")

@@ -315,8 +315,8 @@ async def run_live_async():
                 )
                 print(f"🎯 Take Profit: ${tp_price:.2f}")
         
-        # Wait before next cycle
-        await asyncio.sleep(settings.cooldown_minutes * 60)
+        # Wait before next cycle (minimum 60 seconds between checks)
+        await asyncio.sleep(60)
 
 
 def run_live():
