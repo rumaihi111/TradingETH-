@@ -242,17 +242,25 @@ async def run_live_async():
             if rsi_decision.action == "close_flip":
                 new_side = "short" if current_side == "long" else "long"
             
-            # Position sizing - 80% of wallet at 10x leverage
-            notional_value = equity * settings.max_position_fraction
+            # Position sizing with 10x leverage
+            # margin = how much USD we actually put in from wallet
+            # notional_value = margin * leverage = position value
+            leverage = 10
+            margin = equity * settings.max_position_fraction  # e.g., $940 * 0.8 = $752 actual USD committed
+            notional_value = margin * leverage  # e.g., $752 * 10 = $7,520 position value
             
-            if notional_value < 11:
-                print(f"⚠️ Position size ${notional_value:.2f} below minimum ($11), increasing")
-                notional_value = 11
+            if margin < 11:
+                print(f"⚠️ Margin ${margin:.2f} below minimum ($11), increasing")
+                margin = 11
+                notional_value = margin * leverage
             
             size = notional_value / price
             
+            print(f"💵 Margin (actual USD): ${margin:.2f}")
+            print(f"📊 Position Value (10x): ${notional_value:.2f}")
+            
             print(f"📈 OPENING {new_side.upper()} - RSI: {rsi_decision.rsi_value:.2f}")
-            print(f"💰 Size: {size:.4f} ETH (${notional_value:.2f})")
+            print(f"💰 Size: {size:.4f} ETH @ {leverage}x leverage")
             
             if use_paper:
                 result = ex.place_market(settings.trading_pair, new_side, size, 0.5, price=price)
