@@ -52,22 +52,28 @@ class RSIBrain:
     """
     Second brain that uses RSI and behavioral analysis.
     
-    RSI Zones:
-    - Long Zone: RSI < 30 (oversold - look for longs)
-    - Short Zone: RSI > 70 (overbought - look for shorts)
-    - No Man's Land: 30-70 (especially 40-60 is dead zone)
+    RSI Zones (UPDATED THRESHOLDS):
+    - Long Zone: RSI < 35.28 (oversold - enter long)
+    - Short Zone: RSI > 66.80 (overbought - enter short)
+    - No Man's Land: 35.28 - 66.80 (NO entries allowed, only exits)
     
     Exit triggers:
-    - If in a trade and RSI enters mid no-man's zone (45-55), exit
+    - If in a trade and RSI hits 50.44 AND in profit, exit
+    - Take profit at opposite extreme
     """
     
-    # RSI Zone thresholds
-    OVERSOLD = 30          # Below = long zone
-    OVERBOUGHT = 70        # Above = short zone
-    DEAD_ZONE_LOW = 40     # Below this in no-mans is still actionable
-    DEAD_ZONE_HIGH = 60    # Above this in no-mans is still actionable
-    EXIT_ZONE_LOW = 45     # Mid no-mans zone lower bound
-    EXIT_ZONE_HIGH = 55    # Mid no-mans zone upper bound
+    # RSI Zone thresholds - UPDATED
+    LONG_ENTRY = 35.28       # Below = long entry zone
+    SHORT_ENTRY = 66.80      # Above = short entry zone
+    EXIT_MIDDLE = 50.44      # Exit if in profit and RSI hits this
+    
+    # Legacy names for compatibility
+    OVERSOLD = LONG_ENTRY
+    OVERBOUGHT = SHORT_ENTRY
+    DEAD_ZONE_LOW = LONG_ENTRY
+    DEAD_ZONE_HIGH = SHORT_ENTRY
+    EXIT_ZONE_LOW = 48.0     # Range around exit middle
+    EXIT_ZONE_HIGH = 53.0
     
     def __init__(self, rsi_period: int = 14):
         self.rsi_period = rsi_period
@@ -107,9 +113,9 @@ class RSIBrain:
     
     def get_rsi_zone(self, rsi: float) -> str:
         """Determine which RSI zone we're in"""
-        if rsi <= self.OVERSOLD:
+        if rsi <= self.LONG_ENTRY:
             return "long_zone"
-        elif rsi >= self.OVERBOUGHT:
+        elif rsi >= self.SHORT_ENTRY:
             return "short_zone"
         else:
             return "no_mans_land"
@@ -119,41 +125,43 @@ class RSIBrain:
         Check if RSI says we should NOT enter this trade.
         
         Rules:
-        - Don't long if RSI not in/near long zone (< 40)
-        - Don't short if RSI not in/near short zone (> 60)
-        - Block all entries in dead zone (40-60)
+        - Long entries ONLY when RSI < 35.28
+        - Short entries ONLY when RSI > 66.80
+        - NO entries in no man's land (35.28 - 66.80)
         """
         zone = self.get_rsi_zone(rsi)
         
-        # Dead zone - block all entries
-        if self.DEAD_ZONE_LOW <= rsi <= self.DEAD_ZONE_HIGH:
-            return True, f"RSI {rsi:.1f} in dead zone ({self.DEAD_ZONE_LOW}-{self.DEAD_ZONE_HIGH})"
+        # No man's land - block ALL entries
+        if self.LONG_ENTRY < rsi < self.SHORT_ENTRY:
+            return True, f"RSI {rsi:.2f} in no-man's land ({self.LONG_ENTRY}-{self.SHORT_ENTRY}) - NO ENTRIES"
         
         # Check if RSI supports the trade direction
         if side.lower() == "long":
-            if rsi > self.DEAD_ZONE_LOW:  # RSI > 40, not good for longs
-                return True, f"RSI {rsi:.1f} too high for long entry (need < {self.DEAD_ZONE_LOW})"
+            if rsi > self.LONG_ENTRY:
+                return True, f"RSI {rsi:.2f} too high for long entry (need < {self.LONG_ENTRY})"
         elif side.lower() == "short":
-            if rsi < self.DEAD_ZONE_HIGH:  # RSI < 60, not good for shorts
-                return True, f"RSI {rsi:.1f} too low for short entry (need > {self.DEAD_ZONE_HIGH})"
+            if rsi < self.SHORT_ENTRY:
+                return True, f"RSI {rsi:.2f} too low for short entry (need > {self.SHORT_ENTRY})"
         
         return False, ""
     
-    def should_exit_position(self, rsi: float, position_side: str) -> Tuple[bool, str]:
+    def should_exit_position(self, rsi: float, position_side: str, unrealized_pnl: float = 0) -> Tuple[bool, str]:
         """
         Check if RSI says we should EXIT current position.
         
-        Exit if RSI hits middle of no-man's zone (45-55) during a trade.
+        Exit rules:
+        - Exit at RSI 50.44 IF IN PROFIT
+        - Take profit at opposite extreme
         """
-        # Mid no-mans zone exit trigger
-        if self.EXIT_ZONE_LOW <= rsi <= self.EXIT_ZONE_HIGH:
-            return True, f"RSI {rsi:.1f} hit mid no-mans zone ({self.EXIT_ZONE_LOW}-{self.EXIT_ZONE_HIGH})"
+        # Exit at middle (50.44) ONLY IF IN PROFIT
+        if abs(rsi - self.EXIT_MIDDLE) < 1.0 and unrealized_pnl > 0:
+            return True, f"RSI {rsi:.2f} hit exit zone ({self.EXIT_MIDDLE}) - TAKING PROFIT ${unrealized_pnl:+.2f}"
         
-        # Also exit if RSI goes opposite extreme
-        if position_side.lower() == "long" and rsi >= self.OVERBOUGHT:
-            return True, f"RSI {rsi:.1f} reached overbought - take profit on long"
-        elif position_side.lower() == "short" and rsi <= self.OVERSOLD:
-            return True, f"RSI {rsi:.1f} reached oversold - take profit on short"
+        # Take profit at opposite extreme
+        if position_side.lower() == "long" and rsi >= self.SHORT_ENTRY:
+            return True, f"RSI {rsi:.2f} reached overbought ({self.SHORT_ENTRY}) - TAKE PROFIT on long"
+        elif position_side.lower() == "short" and rsi <= self.LONG_ENTRY:
+            return True, f"RSI {rsi:.2f} reached oversold ({self.LONG_ENTRY}) - TAKE PROFIT on short"
             
         return False, ""
     
@@ -412,11 +420,83 @@ class RSIBrain:
         
         return min(max(score, 0), 1)
     
+    def calculate_stop_loss(self, candles: List[Dict], side: str, entry_price: float) -> Tuple[float, float, str]:
+        """
+        Use brain analysis to determine optimal stop loss and take profit.
+        
+        Logic:
+        - Find recent support/resistance levels
+        - Calculate based on volatility (ATR-like)
+        - Ensure SL/TP can hit within 30min-1hr (realistic for 5min chart)
+        
+        Returns:
+            (stop_loss_pct, take_profit_pct, reasoning)
+        """
+        if len(candles) < 20:
+            # Default conservative values
+            return 0.015, 0.025, "Not enough data - using conservative SL/TP"
+        
+        # Calculate recent volatility (ATR-like measure)
+        ranges = []
+        for c in candles[-20:]:
+            high = float(c.get('high', c.get('h', 0)))
+            low = float(c.get('low', c.get('l', 0)))
+            ranges.append(high - low)
+        
+        avg_range = np.mean(ranges)
+        volatility_pct = avg_range / entry_price
+        
+        # Find support/resistance
+        highs = [float(c.get('high', c.get('h', 0))) for c in candles[-30:]]
+        lows = [float(c.get('low', c.get('l', 0))) for c in candles[-30:]]
+        closes = [float(c.get('close', c.get('c', 0))) for c in candles[-30:]]
+        
+        recent_high = max(highs[-10:])
+        recent_low = min(lows[-10:])
+        swing_high = max(highs)
+        swing_low = min(lows)
+        
+        # Calculate based on side
+        if side.lower() == "long":
+            # Stop loss below recent support
+            sl_price = recent_low - (avg_range * 0.5)
+            sl_pct = abs(entry_price - sl_price) / entry_price
+            
+            # Take profit at resistance or volatility-based
+            tp_price = min(recent_high + (avg_range * 1.5), swing_high)
+            tp_pct = abs(tp_price - entry_price) / entry_price
+            
+            reason = f"Long: SL below ${recent_low:.2f} support, TP near ${recent_high:.2f} resistance"
+        else:  # short
+            # Stop loss above recent resistance
+            sl_price = recent_high + (avg_range * 0.5)
+            sl_pct = abs(sl_price - entry_price) / entry_price
+            
+            # Take profit at support or volatility-based  
+            tp_price = max(recent_low - (avg_range * 1.5), swing_low)
+            tp_pct = abs(entry_price - tp_price) / entry_price
+            
+            reason = f"Short: SL above ${recent_high:.2f} resistance, TP near ${recent_low:.2f} support"
+        
+        # Clamp to realistic values for 30min-1hr timeframe
+        # On 5min chart with typical ETH volatility:
+        # - SL: 0.8% - 2.5% (realistic for 30min move)
+        # - TP: 1.5% - 4% (realistic for 1hr move)
+        sl_pct = max(0.008, min(sl_pct, 0.025))  # 0.8% - 2.5%
+        tp_pct = max(0.015, min(tp_pct, 0.04))   # 1.5% - 4%
+        
+        # Ensure minimum 1.5:1 reward:risk
+        if tp_pct < sl_pct * 1.5:
+            tp_pct = sl_pct * 1.5
+        
+        return sl_pct, tp_pct, reason
+    
     def full_analysis(
         self, 
         candles: List[Dict], 
         current_position: Optional[str] = None,
-        proposed_side: Optional[str] = None
+        proposed_side: Optional[str] = None,
+        unrealized_pnl: float = 0
     ) -> RSIAnalysis:
         """
         Complete RSI brain analysis.
@@ -446,11 +526,11 @@ class RSIBrain:
             else:
                 notes.append(f"✅ RSI supports {proposed_side} entry")
         
-        # Check exit trigger
+        # Check exit trigger - now includes unrealized P&L check
         should_exit = False
         exit_reason = None
         if current_position:
-            should_exit, exit_reason = self.should_exit_position(rsi, current_position)
+            should_exit, exit_reason = self.should_exit_position(rsi, current_position, unrealized_pnl)
             if should_exit:
                 notes.append(f"⚠️ Exit signal: {exit_reason}")
         

@@ -132,10 +132,10 @@ async def run_live_async():
         # ═══════════════════════════════════════════════════════════════
         # 🧠 RSI BRAIN CHECK - Run BEFORE Claude to check for exit signals
         # ═══════════════════════════════════════════════════════════════
-        rsi_analysis = rsi_brain.full_analysis(candles, current_side, None)
+        rsi_analysis = rsi_brain.full_analysis(candles, current_side, None, unrealized_pnl)
         rsi_brain.print_analysis(rsi_analysis)
         
-        # Check if RSI brain wants to exit current position
+        # Check if RSI brain wants to exit current position (ONLY IF IN PROFIT at 50.44)
         if current_pos and rsi_analysis.should_exit:
             print(f"🧠 RSI Brain EXIT SIGNAL: {rsi_analysis.exit_reason}")
             ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
@@ -164,7 +164,8 @@ async def run_live_async():
                     abs(current_pos.get("size", 0)),
                     current_pos.get("entry", 0),
                     close_price,
-                    pnl_value
+                    pnl_value,
+                    reason=f"RSI Exit ({rsi_analysis.rsi_value:.2f})"
                 )
                 await telegram_bot.notify_neutral()
             
@@ -286,22 +287,28 @@ async def run_live_async():
         else:
             print(f"🧠 RSI Brain APPROVED {trade.side} entry (RSI: {rsi_entry_check.rsi_value:.1f}, Confidence: {rsi_entry_check.confidence*100:.0f}%)")
 
-        # Open new position - ALWAYS use max position fraction (ignore Claude's position_fraction)
-        notional_value = equity * settings.max_position_fraction  # Always use 80% of wallet
+        # Open new position - 80% of wallet as MARGIN, with 10x leverage
+        # Example: $100 wallet → $80 margin → $800 position value
+        margin_amount = equity * settings.max_position_fraction  # 80% of wallet = margin
+        position_value = margin_amount * 10  # 10x leverage = position value
         
-        print(f"🔧 DEBUG: settings.max_position_fraction = {settings.max_position_fraction}")
-        print(f"🔧 DEBUG: equity = ${equity:.2f}")
-        print(f"🔧 DEBUG: notional_value = ${notional_value:.2f}")
-        print(f"🔧 DEBUG: Claude's position_fraction (IGNORED) = {trade.position_fraction}")
+        print(f"💰 MARGIN CALCULATION:")
+        print(f"   Wallet Equity: ${equity:.2f}")
+        print(f"   Margin Used (80%): ${margin_amount:.2f}")
+        print(f"   Leverage: 10x")
+        print(f"   Position Value: ${position_value:.2f}")
         
         # Hyperliquid requires minimum $10 order value, use $11 to be safe
-        if notional_value < 11:
-            print(f"⚠️ Position size ${notional_value:.2f} below minimum ($11), increasing to $11")
-            notional_value = 11
+        if margin_amount < 11:
+            print(f"⚠️ Margin ${margin_amount:.2f} below minimum ($11), increasing to $11")
+            margin_amount = 11
+            position_value = margin_amount * 10
         
-        size = notional_value / price  # Convert to ETH amount
+        # Size in ETH based on position value (not margin)
+        size = position_value / price  # This is the leveraged size
+        notional_value = margin_amount  # Keep for compatibility
         
-        print(f"💰 Position sizing: ${notional_value:.2f} ({settings.max_position_fraction*100:.0f}% of ${equity:.2f})")
+        print(f"   ETH Size: {size:.4f} (${position_value:.2f} / ${price:.2f})")
         
         if use_paper:
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct, price=price)
@@ -327,31 +334,61 @@ async def run_live_async():
         # Record trade open
         pnl.record_trade("open", size, price)
         
-        # Send Telegram notification for opened trade
+        # ═══════════════════════════════════════════════════════════════
+        # 🧠 RSI BRAIN - Calculate SL/TP using market analysis
+        # ═══════════════════════════════════════════════════════════════
+        sl_pct, tp_pct, sl_reason = rsi_brain.calculate_stop_loss(candles, trade.side, price)
+        
+        # Calculate actual SL/TP prices
+        if trade.side.lower() == "long":
+            stop_price = price * (1 - sl_pct)
+            tp_price = price * (1 + tp_pct)
+        else:  # short
+            stop_price = price * (1 + sl_pct)
+            tp_price = price * (1 - tp_pct)
+        
+        print(f"🧠 RSI Brain SL/TP: {sl_reason}")
+        print(f"   Stop Loss: ${stop_price:.2f} ({sl_pct*100:.2f}%)")
+        print(f"   Take Profit: ${tp_price:.2f} ({tp_pct*100:.2f}%)")
+        
+        # Send Telegram notification with SL/TP
         if telegram_bot:
-            await telegram_bot.notify_trade_opened(trade.side, size, price)
+            await telegram_bot.notify_trade_opened(
+                side=trade.side, 
+                size=size, 
+                price=price,
+                stop_loss_price=stop_price,
+                take_profit_price=tp_price,
+                leverage=10,
+                margin_used=notional_value
+            )
         
-        trade_log.log_trade({"decision": trade.model_dump(), "result": result, "price": price})
+        trade_log.log_trade({"decision": trade.model_dump(), "result": result, "price": price, "sl": stop_price, "tp": tp_price})
         guard.record_open()
-        print(f"Trade placed: {trade.side} {size:.4f} ETH (${notional_value:.2f}) @ ${price:.2f}, result={result}")
+        print(f"Trade placed: {trade.side} {size:.4f} ETH (${notional_value:.2f} margin, ${notional_value*10:.2f} position) @ ${price:.2f}")
         
-        # Place stop loss and take profit if Claude provided them
-        if not use_paper and position_found and (trade.stop_loss_pct > 0 or trade.take_profit_pct > 0):
-            print(f"\n🛡️ Setting up risk management (SL: {trade.stop_loss_pct*100:.1f}%, TP: {trade.take_profit_pct*100:.1f}%)")
+        # Place stop loss and take profit orders using RSI brain calculated values
+        if not use_paper and position_found:
+            print(f"\n🛡️ Setting up risk management (SL: {sl_pct*100:.2f}%, TP: {tp_pct*100:.2f}%)")
             
             # Get actual entry price from verified position
             entry_price = verified_pos.get('entry_price', verified_pos.get('entry', price))
             actual_size = abs(verified_pos.get('size', size))
             
+            # Recalculate with actual entry price
+            if trade.side.lower() == "long":
+                stop_price = entry_price * (1 - sl_pct)
+                tp_price = entry_price * (1 + tp_pct)
+                stop_side = "sell"
+                tp_side = "sell"
+            else:  # short
+                stop_price = entry_price * (1 + sl_pct)
+                tp_price = entry_price * (1 - tp_pct)
+                stop_side = "buy"
+                tp_side = "buy"
+            
             # Place stop loss
-            if trade.stop_loss_pct > 0:
-                if trade.side.lower() == "long":
-                    stop_price = entry_price * (1 - trade.stop_loss_pct)
-                    stop_side = "sell"
-                else:  # short
-                    stop_price = entry_price * (1 + trade.stop_loss_pct)
-                    stop_side = "buy"
-                
+            try:
                 ex.place_trigger_order(
                     symbol=settings.trading_pair,
                     side=stop_side,
@@ -360,17 +397,12 @@ async def run_live_async():
                     is_stop=True,
                     reduce_only=True
                 )
-                print(f"🛡️ Stop Loss: {stop_side.upper()} {actual_size:.4f} ETH @ ${stop_price:.2f} (-{trade.stop_loss_pct*100:.1f}% from ${entry_price:.2f})")
+                print(f"🛡️ Stop Loss: {stop_side.upper()} {actual_size:.4f} ETH @ ${stop_price:.2f} (-{sl_pct*100:.2f}% from ${entry_price:.2f})")
+            except Exception as e:
+                print(f"⚠️ Failed to place stop loss: {e}")
             
             # Place take profit
-            if trade.take_profit_pct > 0:
-                if trade.side.lower() == "long":
-                    tp_price = entry_price * (1 + trade.take_profit_pct)
-                    tp_side = "sell"
-                else:  # short
-                    tp_price = entry_price * (1 - trade.take_profit_pct)
-                    tp_side = "buy"
-                
+            try:
                 ex.place_trigger_order(
                     symbol=settings.trading_pair,
                     side=tp_side,
@@ -379,7 +411,9 @@ async def run_live_async():
                     is_stop=False,
                     reduce_only=True
                 )
-                print(f"🎯 Take Profit: {tp_side.upper()} {actual_size:.4f} ETH @ ${tp_price:.2f} (+{trade.take_profit_pct*100:.1f}% from ${entry_price:.2f})")
+                print(f"🎯 Take Profit: {tp_side.upper()} {actual_size:.4f} ETH @ ${tp_price:.2f} (+{tp_pct*100:.2f}% from ${entry_price:.2f})")
+            except Exception as e:
+                print(f"⚠️ Failed to place take profit: {e}")
             
             print(f"✅ Risk management orders placed successfully\n")
 
