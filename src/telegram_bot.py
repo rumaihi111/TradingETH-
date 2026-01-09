@@ -1,7 +1,10 @@
 import asyncio
+import csv
 import logging
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 from typing import Optional
+import pytz
 
 from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -37,6 +40,7 @@ class TradingTelegramBot:
         self.app.add_handler(CommandHandler("deposit", self.cmd_deposit))
         self.app.add_handler(CommandHandler("rsi", self.cmd_rsi))
         self.app.add_handler(CommandHandler("analysis", self.cmd_analysis))
+        self.app.add_handler(CommandHandler("data", self.cmd_data))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
         self.app.add_handler(CommandHandler("start", self.cmd_help))
         self.app.add_handler(CommandHandler("price", self.cmd_price))
@@ -55,6 +59,7 @@ class TradingTelegramBot:
             ("rsi", "Show current RSI value and zone"),
             ("price", "Show current ETH price"),
             ("analysis", "Full market analysis"),
+            ("data", "Performance stats by timeframe (daily/weekly/monthly/yearly)"),
             ("winrate", "Show trading statistics and win rate"),
             ("pnl", "Show P&L report"),
             ("status", "Show bot status"),
@@ -92,6 +97,7 @@ class TradingTelegramBot:
 /balance - Wallet balance and positions
 /pnl - P&L report
 /winrate - Trading statistics
+/data - Performance by timeframe (EST)
 /status - Bot operational status
 
 💳 **Transactions:**
@@ -297,6 +303,153 @@ class TradingTelegramBot:
             
             await update.message.reply_text(message, parse_mode='Markdown')
         except Exception as e:
+            await update.message.reply_text(f"❌ Error: {e}")
+
+    def _parse_trade_history(self):
+        """Parse trade_history.csv and return list of trades with datetime"""
+        trades = []
+        csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "trade_history.csv")
+        
+        if not os.path.exists(csv_path):
+            return trades
+        
+        try:
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        # Parse date format: "12/31/2025 - 19:27:39"
+                        time_str = row.get('time', '')
+                        dt = datetime.strptime(time_str, "%m/%d/%Y - %H:%M:%S")
+                        
+                        # Parse closedPnl
+                        closed_pnl = float(row.get('closedPnl', 0))
+                        direction = row.get('dir', '')
+                        coin = row.get('coin', '')
+                        
+                        trades.append({
+                            'datetime': dt,
+                            'coin': coin,
+                            'direction': direction,
+                            'pnl': closed_pnl,
+                            'price': float(row.get('px', 0)),
+                            'size': float(row.get('sz', 0)),
+                            'notional': float(row.get('ntl', 0)),
+                            'fee': float(row.get('fee', 0))
+                        })
+                    except (ValueError, KeyError) as e:
+                        continue
+        except Exception as e:
+            logger.error(f"Error parsing trade history: {e}")
+        
+        return trades
+
+    def _calculate_timeframe_stats(self, trades, start_dt, end_dt):
+        """Calculate statistics for trades within a timeframe"""
+        # Filter trades within the timeframe
+        filtered = [t for t in trades if start_dt <= t['datetime'] < end_dt]
+        
+        if not filtered:
+            return {
+                'total_trades': 0,
+                'wins': 0,
+                'losses': 0,
+                'win_rate': 0.0,
+                'total_pnl': 0.0,
+                'total_profit': 0.0,
+                'total_loss': 0.0
+            }
+        
+        wins = [t for t in filtered if t['pnl'] > 0]
+        losses = [t for t in filtered if t['pnl'] < 0]
+        
+        total_pnl = sum(t['pnl'] for t in filtered)
+        total_profit = sum(t['pnl'] for t in wins)
+        total_loss = sum(t['pnl'] for t in losses)
+        
+        win_rate = (len(wins) / len(filtered) * 100) if filtered else 0.0
+        
+        return {
+            'total_trades': len(filtered),
+            'wins': len(wins),
+            'losses': len(losses),
+            'win_rate': win_rate,
+            'total_pnl': total_pnl,
+            'total_profit': total_profit,
+            'total_loss': total_loss
+        }
+
+    async def cmd_data(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show performance statistics by timeframe (daily, weekly, monthly, yearly) in EST"""
+        try:
+            # Get current time in EST
+            est = pytz.timezone('America/New_York')
+            now_est = datetime.now(est)
+            
+            # Parse trade history
+            trades = self._parse_trade_history()
+            
+            if not trades:
+                await update.message.reply_text("📊 No trade history found")
+                return
+            
+            # Convert trade datetimes to EST (assuming they're in UTC)
+            utc = pytz.UTC
+            for trade in trades:
+                if trade['datetime'].tzinfo is None:
+                    trade['datetime'] = utc.localize(trade['datetime'])
+                trade['datetime'] = trade['datetime'].astimezone(est)
+            
+            # Calculate timeframe boundaries (EST)
+            # Daily: Start of today (00:00 EST)
+            today_start = now_est.replace(hour=0, minute=0, second=0, microsecond=0)
+            tomorrow_start = today_start + timedelta(days=1)
+            
+            # Weekly: Start of this week (Monday 00:00 EST)
+            days_since_monday = now_est.weekday()
+            week_start = (now_est - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+            week_end = week_start + timedelta(days=7)
+            
+            # Monthly: Start of this month
+            month_start = now_est.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if now_est.month == 12:
+                month_end = now_est.replace(year=now_est.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                month_end = now_est.replace(month=now_est.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            
+            # Yearly: Start of this year
+            year_start = now_est.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            year_end = now_est.replace(year=now_est.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            
+            # Calculate stats for each timeframe
+            daily_stats = self._calculate_timeframe_stats(trades, today_start, tomorrow_start)
+            weekly_stats = self._calculate_timeframe_stats(trades, week_start, week_end)
+            monthly_stats = self._calculate_timeframe_stats(trades, month_start, month_end)
+            yearly_stats = self._calculate_timeframe_stats(trades, year_start, year_end)
+            
+            def format_stats(label, stats, emoji):
+                pnl_emoji = "🟢" if stats['total_pnl'] >= 0 else "🔴"
+                return f"""{emoji} **{label}**
+• Trades: {stats['total_trades']}
+• Wins: {stats['wins']} | Losses: {stats['losses']}
+• Win Rate: {stats['win_rate']:.1f}%
+• Profit: ${stats['total_profit']:+.4f}
+• Loss: ${stats['total_loss']:+.4f}
+• {pnl_emoji} Net P&L: ${stats['total_pnl']:+.4f}
+"""
+            
+            message = f"""📊 **PERFORMANCE DATA (EST)**
+
+{format_stats('TODAY (24h)', daily_stats, '📅')}
+{format_stats('THIS WEEK', weekly_stats, '📆')}
+{format_stats('THIS MONTH', monthly_stats, '🗓️')}
+{format_stats('THIS YEAR', yearly_stats, '📈')}
+🕐 {now_est.strftime('%Y-%m-%d %H:%M:%S EST')}
+📍 Timezone: America/New_York"""
+            
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in cmd_data: {e}")
             await update.message.reply_text(f"❌ Error: {e}")
 
     async def cmd_close_trade(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
