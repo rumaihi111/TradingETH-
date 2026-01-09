@@ -58,6 +58,9 @@ class TradingTelegramBot:
         ]
         await self.app.bot.set_my_commands(commands)
         logger.info("🤖 Telegram bot started with commands")
+        
+        # Send startup notification
+        await self.notify_startup()
 
     async def stop(self):
         """Stop the Telegram bot"""
@@ -65,12 +68,52 @@ class TradingTelegramBot:
         await self.app.stop()
         await self.app.shutdown()
 
-    async def send_message(self, text: str):
+    async def send_message(self, text: str, parse_mode: str = 'Markdown'):
         """Send a message to the configured chat"""
         try:
-            await self.app.bot.send_message(chat_id=self.chat_id, text=text)
+            await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode=parse_mode)
         except Exception as e:
             logger.error(f"Failed to send Telegram message: {e}")
+
+    async def notify_startup(self):
+        """Send notification when bot starts/restarts"""
+        try:
+            account = self.hyperliquid.account()
+            equity = account.get("equity", 0)
+            positions = self.hyperliquid.positions()
+            
+            message = f"🚀 **BOT STARTED**\n\n"
+            message += f"🕐 {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+            message += f"💰 **Wallet:** ${equity:.2f} USDC\n"
+            
+            if positions and abs(positions[0].get('size', 0)) > 0.0001:
+                pos = positions[0]
+                side = "LONG 📈" if pos['size'] > 0 else "SHORT 📉"
+                size = abs(pos['size'])
+                entry = pos.get('entry_price', pos.get('entry', 0))
+                message += f"\n📊 **Existing Position:**\n"
+                message += f"• {side} {size:.4f} ETH @ ${entry:.2f}\n"
+            else:
+                message += f"\n📊 **Position:** None (flat)\n"
+            
+            message += f"\n🧠 **RSI Brain:** Active\n"
+            message += f"• Long: RSI < 35.28\n"
+            message += f"• Short: RSI > 66.80\n"
+            message += f"• Exit: RSI = 50.44 (if profit)\n"
+            message += f"\n✅ Bot is now monitoring..."
+            
+            await self.send_message(message)
+        except Exception as e:
+            logger.error(f"Failed to send startup notification: {e}")
+
+    async def notify_error(self, error: str, context: str = ""):
+        """Send notification when an error occurs"""
+        message = f"⚠️ **BOT ERROR**\n\n"
+        if context:
+            message += f"**Context:** {context}\n"
+        message += f"**Error:** {error}\n"
+        message += f"🕐 {datetime.utcnow().strftime('%H:%M:%S UTC')}"
+        await self.send_message(message)
 
     # Command Handlers
     async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

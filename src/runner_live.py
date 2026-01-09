@@ -100,7 +100,29 @@ async def run_live_async():
         if use_paper and hasattr(ex, 'check_liquidation'):
             if ex.check_liquidation(price):
                 print("💥 Position liquidated due to excessive loss")
+                if telegram_bot:
+                    await telegram_bot.notify_error("Position liquidated due to excessive loss", "Liquidation")
                 await asyncio.sleep(300)  # Wait 5 minutes before next trade
+                continue
+        
+        # Check paper mode trigger orders (SL/TP simulation)
+        if use_paper and hasattr(ex, 'check_trigger_orders'):
+            triggered = ex.check_trigger_orders(price)
+            if triggered:
+                order_type = "🛡️ Stop Loss" if triggered['is_stop'] else "🎯 Take Profit"
+                print(f"{order_type} triggered @ ${triggered['trigger_price']:.2f}")
+                print(f"   Closed position: {triggered['side']} {triggered['size']:.4f} ETH")
+                print(f"   P&L: ${triggered.get('pnl', 0):+.2f}")
+                
+                if telegram_bot:
+                    trigger_type = "Stop Loss" if triggered['is_stop'] else "Take Profit"
+                    await telegram_bot.send_message(
+                        f"{'🛡️' if triggered['is_stop'] else '🎯'} **{trigger_type} TRIGGERED**\n\n"
+                        f"Trigger: ${triggered['trigger_price']:.2f}\n"
+                        f"Size: {triggered['size']:.4f} ETH\n"
+                        f"P&L: ${triggered.get('pnl', 0):+.2f}"
+                    )
+                    await telegram_bot.notify_neutral()
                 continue
         
         # Calculate unrealized P&L from open position
@@ -400,6 +422,8 @@ async def run_live_async():
                 print(f"🛡️ Stop Loss: {stop_side.upper()} {actual_size:.4f} ETH @ ${stop_price:.2f} (-{sl_pct*100:.2f}% from ${entry_price:.2f})")
             except Exception as e:
                 print(f"⚠️ Failed to place stop loss: {e}")
+                if telegram_bot:
+                    await telegram_bot.notify_error(str(e), "Stop Loss Order")
             
             # Place take profit
             try:
@@ -414,8 +438,47 @@ async def run_live_async():
                 print(f"🎯 Take Profit: {tp_side.upper()} {actual_size:.4f} ETH @ ${tp_price:.2f} (+{tp_pct*100:.2f}% from ${entry_price:.2f})")
             except Exception as e:
                 print(f"⚠️ Failed to place take profit: {e}")
+                if telegram_bot:
+                    await telegram_bot.notify_error(str(e), "Take Profit Order")
             
             print(f"✅ Risk management orders placed successfully\n")
+        
+        # Place SL/TP for paper mode
+        elif use_paper and hasattr(ex, 'place_trigger_order'):
+            print(f"\n🛡️ Setting up paper mode risk management (SL: {sl_pct*100:.2f}%, TP: {tp_pct*100:.2f}%)")
+            
+            entry_price = price
+            actual_size = size
+            
+            if trade.side.lower() == "long":
+                stop_price = entry_price * (1 - sl_pct)
+                tp_price = entry_price * (1 + tp_pct)
+                stop_side = "sell"
+            else:  # short
+                stop_price = entry_price * (1 + sl_pct)
+                tp_price = entry_price * (1 - tp_pct)
+                stop_side = "buy"
+            
+            # Place stop loss
+            ex.place_trigger_order(
+                symbol=settings.trading_pair,
+                side=stop_side,
+                size=actual_size,
+                trigger_price=stop_price,
+                is_stop=True
+            )
+            print(f"🛡️ Paper SL: ${stop_price:.2f}")
+            
+            # Place take profit
+            ex.place_trigger_order(
+                symbol=settings.trading_pair,
+                side=stop_side,
+                size=actual_size,
+                trigger_price=tp_price,
+                is_stop=False
+            )
+            print(f"🎯 Paper TP: ${tp_price:.2f}")
+            print(f"✅ Paper mode risk management active\n")
 
         # Wait cooldown before next signal
         await asyncio.sleep(settings.cooldown_minutes * 60)

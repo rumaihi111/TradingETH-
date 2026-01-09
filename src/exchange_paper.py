@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class PaperExchange:
@@ -8,6 +8,7 @@ class PaperExchange:
         self.state_file = state_file
         self.leverage = leverage  # 10x leverage means 10% move = 100% gain/loss
         self.liquidation_threshold = 0.90  # Liquidate if loss reaches 90% of margin
+        self.trigger_orders: List[Dict[str, Any]] = []  # Store SL/TP orders
         data_dir = os.path.dirname(self.state_file)
         os.makedirs(data_dir, exist_ok=True)
         
@@ -23,10 +24,12 @@ class PaperExchange:
                 state = json.load(f)
                 self.equity = state.get("equity", starting_equity)
                 self.position = state.get("position", {"coin": None, "size": 0.0, "entry": 0.0, "margin": 0.0})
+                self.trigger_orders = state.get("trigger_orders", [])
                 print(f"Paper wallet loaded: ${self.equity:.2f} equity, position={self.position}, leverage={self.leverage}x")
         else:
             self.equity = starting_equity
             self.position = {"coin": None, "size": 0.0, "entry": 0.0, "margin": 0.0}
+            self.trigger_orders = []
             print(f"Paper wallet initialized: ${self.equity:.2f}, leverage={self.leverage}x (file not found: {self.state_file})")
             
         self.trades: List[Dict[str, Any]] = []
@@ -35,7 +38,11 @@ class PaperExchange:
     def _save_state(self):
         """Persist wallet state to disk"""
         with open(self.state_file, "w", encoding="utf-8") as f:
-            json.dump({"equity": self.equity, "position": self.position}, f, indent=2)
+            json.dump({
+                "equity": self.equity, 
+                "position": self.position,
+                "trigger_orders": self.trigger_orders
+            }, f, indent=2)
 
     def account(self) -> Dict[str, Any]:
         return {"equity": self.equity}
@@ -73,11 +80,78 @@ class PaperExchange:
         pnl = (price - self.position["entry"]) * pos_size
         self.equity += pnl
         
+        # Clear trigger orders when position closes
+        self.trigger_orders = []
+        
         self.trades.append({"symbol": symbol, "side": "close", "size": pos_size, "price": price, "pnl": pnl, "type": "close"})
         self.position = {"coin": None, "size": 0.0, "entry": 0.0, "margin": 0.0}
         self._save_state()
         print(f"Paper wallet updated: ${self.equity:.2f} (Leveraged P&L: ${pnl:+.2f})")
-        return {"status": "closed", "paper": True, "price": price, "pnl": pnl}
+        return {"status": "closed", "paper": True, "price": price, "pnl": pnl, "close_price": price}
+    
+    def place_trigger_order(self, symbol: str, side: str, size: float, trigger_price: float, is_stop: bool = True, reduce_only: bool = True) -> Dict[str, Any]:
+        """Place a simulated stop loss or take profit order"""
+        order = {
+            "symbol": symbol,
+            "side": side,
+            "size": size,
+            "trigger_price": trigger_price,
+            "is_stop": is_stop,
+            "reduce_only": reduce_only,
+            "type": "sl" if is_stop else "tp"
+        }
+        self.trigger_orders.append(order)
+        self._save_state()
+        order_type = "Stop Loss" if is_stop else "Take Profit"
+        print(f"📝 Paper {order_type}: {side.upper()} {size:.4f} {symbol} @ ${trigger_price:.2f}")
+        return {"status": "ok", "paper": True, "order": order}
+    
+    def cancel_all_orders(self, symbol: str) -> Dict[str, Any]:
+        """Cancel all trigger orders for a symbol"""
+        before = len(self.trigger_orders)
+        self.trigger_orders = [o for o in self.trigger_orders if o.get("symbol") != symbol]
+        after = len(self.trigger_orders)
+        self._save_state()
+        print(f"🧹 Paper: Cancelled {before - after} orders for {symbol}")
+        return {"status": "ok", "cancelled": before - after}
+    
+    def check_trigger_orders(self, current_price: float) -> Optional[Dict[str, Any]]:
+        """Check if any trigger orders should execute. Returns triggered order info or None."""
+        if self.position["size"] == 0 or not self.trigger_orders:
+            return None
+        
+        is_long = self.position["size"] > 0
+        
+        for order in self.trigger_orders:
+            trigger_price = order["trigger_price"]
+            is_stop = order["is_stop"]
+            
+            triggered = False
+            
+            if is_long:
+                # Long position: SL triggers when price drops below, TP triggers when price rises above
+                if is_stop and current_price <= trigger_price:
+                    triggered = True
+                    print(f"🛑 STOP LOSS TRIGGERED @ ${current_price:.2f} (trigger: ${trigger_price:.2f})")
+                elif not is_stop and current_price >= trigger_price:
+                    triggered = True
+                    print(f"🎯 TAKE PROFIT TRIGGERED @ ${current_price:.2f} (trigger: ${trigger_price:.2f})")
+            else:
+                # Short position: SL triggers when price rises above, TP triggers when price drops below
+                if is_stop and current_price >= trigger_price:
+                    triggered = True
+                    print(f"🛑 STOP LOSS TRIGGERED @ ${current_price:.2f} (trigger: ${trigger_price:.2f})")
+                elif not is_stop and current_price <= trigger_price:
+                    triggered = True
+                    print(f"🎯 TAKE PROFIT TRIGGERED @ ${current_price:.2f} (trigger: ${trigger_price:.2f})")
+            
+            if triggered:
+                # Execute the close at trigger price
+                result = self.close_position(order["symbol"], price=trigger_price)
+                result["trigger_type"] = "sl" if is_stop else "tp"
+                return result
+        
+        return None
     
     def check_liquidation(self, current_price: float) -> bool:
         """Check if position should be liquidated"""
