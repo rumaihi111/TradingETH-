@@ -13,6 +13,7 @@ from .trade_logger import TradeLogger
 from .pnl_tracker import PnLTracker
 from .risk import FrequencyGuard, clamp_decision
 from .telegram_bot import TradingTelegramBot, schedule_daily_reports
+from .rsi_brain import RSIBrain
 
 
 telegram_bot: Optional[TradingTelegramBot] = None
@@ -55,6 +56,10 @@ async def run_live_async():
     guard = FrequencyGuard(settings.max_trades_per_hour, settings.cooldown_minutes)
     spot = ccxt.kucoin()
     rate_limit_backoff = 60  # Start with 60 second backoff on rate limit
+    
+    # Initialize RSI Brain (second brain / hive mind)
+    rsi_brain = RSIBrain(rsi_period=14)
+    print("🧠 RSI Brain initialized (RSI-14 on 5m chart)")
 
     while True:
         try:
@@ -114,16 +119,7 @@ async def run_live_async():
         current_position = open_positions[0] if open_positions else None
         pnl.print_balance_sheet(equity, unrealized_pnl, current_position)
         
-        # Check if we should query Claude (respect cooldown)
-        if not guard.allow_new_trade():
-            print(f"⏸️  Cooldown active, waiting...")
-            await asyncio.sleep(60)  # Check again in 1 minute
-            continue
-        
-        decision_raw: Dict = ai.fetch_signal(candles)
-        trade = clamp_decision(decision_raw, settings.max_position_fraction)
-
-        # Determine current position state
+        # Determine current position state FIRST (needed for RSI brain)
         current_pos = open_positions[0] if open_positions else None
         current_side = None
         if current_pos:
@@ -132,6 +128,60 @@ async def run_live_async():
                 current_side = "long"
             elif size < 0:
                 current_side = "short"
+        
+        # ═══════════════════════════════════════════════════════════════
+        # 🧠 RSI BRAIN CHECK - Run BEFORE Claude to check for exit signals
+        # ═══════════════════════════════════════════════════════════════
+        rsi_analysis = rsi_brain.full_analysis(candles, current_side, None)
+        rsi_brain.print_analysis(rsi_analysis)
+        
+        # Check if RSI brain wants to exit current position
+        if current_pos and rsi_analysis.should_exit:
+            print(f"🧠 RSI Brain EXIT SIGNAL: {rsi_analysis.exit_reason}")
+            ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
+            close_price = ohlcv_close[0][4]
+            if use_paper:
+                close_result = ex.close_position(settings.trading_pair, price=close_price)
+            else:
+                close_result = ex.close_position(settings.trading_pair)
+            
+            # Record P&L
+            pnl_value = close_result.get("pnl", 0)
+            if pnl_value == 0:
+                entry = current_pos.get("entry", 0)
+                size = abs(current_pos.get("size", 0))
+                if current_side == "long":
+                    pnl_value = (close_price - entry) * size
+                else:
+                    pnl_value = (entry - close_price) * size
+            
+            pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, pnl_value)
+            
+            # Send Telegram notification
+            if telegram_bot:
+                await telegram_bot.notify_trade_closed(
+                    current_side,
+                    abs(current_pos.get("size", 0)),
+                    current_pos.get("entry", 0),
+                    close_price,
+                    pnl_value
+                )
+                await telegram_bot.notify_neutral()
+            
+            trade_log.log_trade({"decision": {"side": "close", "reason": "RSI brain exit"}, "result": close_result, "price": close_price})
+            print(f"🧠 RSI Brain closed {current_side} position @ ${close_price:.2f} (P&L: ${pnl_value:+.2f})")
+            guard.record_close()
+            await asyncio.sleep(300)  # Wait 5 minutes after RSI-triggered exit
+            continue
+        
+        # Check if we should query Claude (respect cooldown)
+        if not guard.allow_new_trade():
+            print(f"⏸️  Cooldown active, waiting...")
+            await asyncio.sleep(60)  # Check again in 1 minute
+            continue
+        
+        decision_raw: Dict = ai.fetch_signal(candles)
+        trade = clamp_decision(decision_raw, settings.max_position_fraction)
 
         # Decision logic: close/flip/hold/open based on signal
         if trade.side == "flat":
@@ -219,6 +269,22 @@ async def run_live_async():
             print(f"Signal: {trade.side} → Closed {current_side} position @ ${close_price:.2f} (P&L: ${pnl_value:+.2f})")
             guard.record_close()
             await asyncio.sleep(5)
+
+        # ═══════════════════════════════════════════════════════════════
+        # 🧠 RSI BRAIN ENTRY CHECK - Validate Claude's decision before opening
+        # ═══════════════════════════════════════════════════════════════
+        rsi_entry_check = rsi_brain.full_analysis(candles, None, trade.side)
+        
+        if not rsi_entry_check.should_enter:
+            print(f"🧠 RSI Brain BLOCKED entry: {trade.side}")
+            for note in rsi_entry_check.analysis_notes:
+                if "🚫" in note or "blocked" in note.lower():
+                    print(f"   {note}")
+            print(f"⏸️  Waiting for better RSI conditions...")
+            await asyncio.sleep(300)  # Wait 5 minutes and re-evaluate
+            continue
+        else:
+            print(f"🧠 RSI Brain APPROVED {trade.side} entry (RSI: {rsi_entry_check.rsi_value:.1f}, Confidence: {rsi_entry_check.confidence*100:.0f}%)")
 
         # Open new position - ALWAYS use max position fraction (ignore Claude's position_fraction)
         notional_value = equity * settings.max_position_fraction  # Always use 80% of wallet
