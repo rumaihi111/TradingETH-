@@ -2,9 +2,17 @@
 """Startup wrapper to catch import errors and display them"""
 import sys
 import traceback
+import os
 
+# Force unbuffered output
+os.environ['PYTHONUNBUFFERED'] = '1'
+
+print("=" * 50, flush=True)
 print("🚀 Starting TradingETH bot...", flush=True)
 print(f"Python version: {sys.version}", flush=True)
+print(f"Working directory: {os.getcwd()}", flush=True)
+print(f"Files in directory: {os.listdir('.')}", flush=True)
+print("=" * 50, flush=True)
 
 try:
     print("📦 Importing modules...", flush=True)
