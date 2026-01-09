@@ -21,11 +21,19 @@ telegram_bot: Optional[TradingTelegramBot] = None
 
 async def run_live_async():
     global telegram_bot
+    
+    # Load settings with clear error messages
+    print("📋 Loading configuration...")
     settings = load_settings()
+    print(f"   Paper Mode: {settings.paper_mode}")
+    print(f"   Testnet: {settings.hyperliquid_testnet}")
+    
     history = HistoryStore()
     trade_log = TradeLogger()
     ai = AISignalClient(api_key=settings.anthropic_api_key, history_store=history)
     use_paper = settings.paper_mode
+    
+    print("🔗 Connecting to exchange...")
     if use_paper:
         ex = PaperExchange(starting_equity=settings.paper_initial_equity)
     else:
@@ -39,24 +47,34 @@ async def run_live_async():
     # Initialize P&L tracker with current wallet equity as baseline
     current_equity = ex.account().get("equity", settings.paper_initial_equity)
     pnl = PnLTracker(current_equity=current_equity)
+    print(f"💰 Starting equity: ${current_equity:.2f}")
     
-    # Initialize Telegram bot if configured
+    # Initialize Telegram bot if configured (with error handling)
     if settings.telegram_token and settings.telegram_chat_id:
-        telegram_bot = TradingTelegramBot(
-            telegram_token=settings.telegram_token,
-            chat_id=settings.telegram_chat_id,
-            hyperliquid_client=ex,
-            pnl_tracker=pnl,
-        )
-        await telegram_bot.start()
-        # Start daily report scheduler in background
-        asyncio.create_task(schedule_daily_reports(telegram_bot))
-        print("🤖 Telegram bot enabled")
+        try:
+            telegram_bot = TradingTelegramBot(
+                telegram_token=settings.telegram_token,
+                chat_id=settings.telegram_chat_id,
+                hyperliquid_client=ex,
+                pnl_tracker=pnl,
+            )
+            await telegram_bot.start()
+            # Start daily report scheduler in background
+            asyncio.create_task(schedule_daily_reports(telegram_bot))
+            print("🤖 Telegram bot enabled")
+        except Exception as e:
+            print(f"⚠️ Telegram bot failed to start: {e}")
+            print("   Bot will continue without Telegram notifications")
+            telegram_bot = None
     
     guard = FrequencyGuard(settings.max_trades_per_hour, settings.cooldown_minutes)
     rsi_engine = RSITradingEngine()  # Initialize RSI trading engine
+    
+    print("📊 Connecting to KuCoin for price data...")
     spot = ccxt.kucoin()
     rate_limit_backoff = 60  # Start with 60 second backoff on rate limit
+    
+    print("✅ Initialization complete! Starting trading loop...\n")
 
     while True:
         try:
@@ -320,8 +338,27 @@ async def run_live_async():
 
 
 def run_live():
-    """Entry point that runs the async trading loop"""
-    asyncio.run(run_live_async())
+    """Entry point that runs the async trading loop with crash recovery"""
+    max_retries = 10
+    retry_delay = 30
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"🚀 Starting trading bot (attempt {attempt + 1}/{max_retries})...")
+            asyncio.run(run_live_async())
+        except KeyboardInterrupt:
+            print("\n👋 Bot stopped by user")
+            break
+        except Exception as e:
+            print(f"💥 Bot crashed: {e}")
+            if attempt < max_retries - 1:
+                print(f"⏳ Restarting in {retry_delay} seconds...")
+                import time
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 300)  # Max 5 min backoff
+            else:
+                print("❌ Max retries exceeded, exiting")
+                raise
 
 
 if __name__ == "__main__":
