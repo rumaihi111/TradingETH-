@@ -160,7 +160,7 @@ RULES:
 5. Always answer in short detailed knowledgeable answers.
 
 TRADING RULES:
-- Trade on 10x leverage.
+- Trade on 15x leverage.
 - Max open trades at once is 1.
 - Compound the money.
 - Trade max 2 times per hour with a 30 minute interval break per trade.
@@ -185,14 +185,14 @@ You have a second analytical brain that provides deep price action insights. Use
 RISK MANAGEMENT:
 - Always set stop_loss_pct (recommended: 0.03-0.08 = 3-8% from entry)
 - Always set take_profit_pct (recommended: 0.08-0.15 = 8-15% from entry)
-- With 10x leverage, a 5% stop loss = 50% of position at risk
+- With 15x leverage, a 5% stop loss = 75% of position at risk
 - Risk/Reward: Take profit should be 1.5x-3x stop loss distance
 - Set stops based on support/resistance levels, not arbitrary percentages
 - Use Second Brain's recommended SL/TP as guidance
 
 POSITION SIZING:
-- Bot uses 80% of available margin at 10x leverage
-- $70 margin = $800 position value (10x)
+- Bot uses 80% of available margin at 15x leverage
+- $70 margin = $1050 position value (15x)
 - position_fraction is IGNORED - always 0.8 internally
 
 RESPONSE FORMAT:

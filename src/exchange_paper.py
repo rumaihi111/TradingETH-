@@ -4,9 +4,9 @@ from typing import Any, Dict, List
 
 
 class PaperExchange:
-    def __init__(self, starting_equity: float = 10000.0, state_file: str = "data/paper_wallet.json", leverage: float = 10.0):
+    def __init__(self, starting_equity: float = 10000.0, state_file: str = "data/paper_wallet.json", leverage: float = 15.0):
         self.state_file = state_file
-        self.leverage = leverage  # 10x leverage means 10% move = 100% gain/loss
+        self.leverage = leverage  # 15x leverage means 6.67% move = 100% gain/loss
         self.liquidation_threshold = 0.90  # Liquidate if loss reaches 90% of margin
         data_dir = os.path.dirname(self.state_file)
         os.makedirs(data_dir, exist_ok=True)

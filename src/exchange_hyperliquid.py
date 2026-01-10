@@ -23,8 +23,8 @@ class HyperliquidClient:
         self.info = Info(base_url, skip_ws=skip_ws)
         self.exchange = Exchange(self.wallet, base_url, account_address=self.account_address)
         
-        # Note: Bot assumes 10x leverage - set this manually in Hyperliquid UI
-        print("⚠️ IMPORTANT: Ensure your Hyperliquid account is set to 10x leverage (Cross Margin)")
+        # Note: Bot assumes 15x leverage - set this manually in Hyperliquid UI
+        print("⚠️ IMPORTANT: Ensure your Hyperliquid account is set to 15x leverage (Cross Margin)")
 
     def account(self) -> Dict[str, Any]:
         """Get account state with equity"""
