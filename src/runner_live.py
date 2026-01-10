@@ -16,6 +16,7 @@ from .pnl_tracker import PnLTracker
 from .risk import FrequencyGuard, clamp_decision
 from .telegram_bot import TradingTelegramBot, schedule_daily_reports
 from .rsi_engine import RSITradingEngine  # New RSI-only engine
+from .numerology import is_trading_allowed_today, get_life_path_breakdown
 
 
 telegram_bot: Optional[TradingTelegramBot] = None
@@ -119,9 +120,48 @@ async def run_live_async():
     print("✅ Initialization complete! Starting trading loop...\n")
     
     last_timeframe = None  # Track timeframe changes
+    last_numerology_check_date = None  # Track when we last checked numerology
 
     while True:
         try:
+            # ========== GG33 NUMEROLOGY CHECK ==========
+            # Check if trading is allowed today (Life Path 3 = no trading)
+            today = datetime.now().date()
+            if today != last_numerology_check_date:
+                trading_allowed, life_path, explanation = is_trading_allowed_today()
+                print("\n" + "="*60)
+                print(get_life_path_breakdown())
+                print("="*60 + "\n")
+                
+                if telegram_bot:
+                    await telegram_bot.send_message(f"🔢 Daily Numerology Check\n{explanation}")
+                
+                last_numerology_check_date = today
+            
+            # If Life Path 3 day, skip all trading (but allow position monitoring)
+            if not trading_allowed:
+                print(f"⛔ Life Path 3 day - Trading blocked. Monitoring only...")
+                # Still fetch data to monitor existing positions
+                current_timeframe, sleep_interval = get_trading_timeframe()
+                ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe=current_timeframe, limit=50)
+                candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
+                price = candles[-1]["close"]
+                
+                account = ex.account()
+                equity = account.get("equity", 0)
+                open_positions = ex.positions()
+                
+                if open_positions:
+                    current_pos = open_positions[0]
+                    pos_size = current_pos.get("size", 0)
+                    entry_price = current_pos.get("entry", 0)
+                    unrealized_pnl = (price - entry_price) * pos_size if pos_size != 0 else 0
+                    print(f"📍 Monitoring position: {abs(pos_size):.4f} ETH @ ${entry_price:.2f} | P&L: ${unrealized_pnl:+.2f}")
+                
+                print(f"💤 Sleeping for 5 minutes (Life Path 3 day)...\n")
+                await asyncio.sleep(300)  # Check every 5 minutes on blocked days
+                continue
+            
             # Get dynamic timeframe based on EST time
             current_timeframe, sleep_interval = get_trading_timeframe()
             
