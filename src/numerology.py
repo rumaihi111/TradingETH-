@@ -7,6 +7,10 @@ Days with Life Path number 3 are blocked from trading.
 
 from datetime import datetime, date
 from typing import Union
+from zoneinfo import ZoneInfo
+
+# EST timezone for date calculations
+EST = ZoneInfo("America/New_York")
 
 
 def reduce_to_single_digit(n: int) -> int:
@@ -63,18 +67,19 @@ def calculate_life_path(target_date: Union[datetime, date]) -> int:
 def is_trading_allowed_today() -> tuple[bool, int, str]:
     """
     Check if trading is allowed today based on Zorak Corp numerology.
+    Uses EST timezone for date calculation.
     
     Returns:
         tuple: (is_allowed, life_path_number, explanation)
     """
-    today = datetime.now().date()
+    today = datetime.now(EST).date()
     life_path = calculate_life_path(today)
     
     # Block trading on Life Path 3 days
     if life_path == 3:
         explanation = (
             f"🔢 Today's Life Path: {life_path}\n"
-            f"📅 Date: {today.strftime('%m/%d/%Y')}\n"
+            f"📅 Date (EST): {today.strftime('%m/%d/%Y')}\n"
             f"⛔ Trading BLOCKED - Life Path 3 day\n"
             f"💡 Per Zorak Corp numerology, avoid trading on Life Path 3 days"
         )
@@ -82,7 +87,7 @@ def is_trading_allowed_today() -> tuple[bool, int, str]:
     
     explanation = (
         f"🔢 Today's Life Path: {life_path}\n"
-        f"📅 Date: {today.strftime('%m/%d/%Y')}\n"
+        f"📅 Date (EST): {today.strftime('%m/%d/%Y')}\n"
         f"✅ Trading ALLOWED"
     )
     return True, life_path, explanation
@@ -91,15 +96,16 @@ def is_trading_allowed_today() -> tuple[bool, int, str]:
 def get_life_path_breakdown(target_date: Union[datetime, date] = None) -> str:
     """
     Get a detailed breakdown of the life path calculation.
+    Uses EST timezone when no date is provided.
     
     Args:
-        target_date: Date to calculate (defaults to today)
+        target_date: Date to calculate (defaults to today in EST)
         
     Returns:
         Formatted string showing calculation steps
     """
     if target_date is None:
-        target_date = datetime.now().date()
+        target_date = datetime.now(EST).date()
     elif isinstance(target_date, datetime):
         target_date = target_date.date()
     
