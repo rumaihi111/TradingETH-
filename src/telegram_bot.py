@@ -112,8 +112,8 @@ class TradingTelegramBot:
 • No-Man Zone: 35.28 - 66.80
 
 ⚙️ **Settings:**
-• Leverage: 10x
-• Position Size: 80% margin
+• Leverage: 15x
+• Position Size: 95% margin
 • Asset: ETH/USDC"""
         
         await update.message.reply_text(message, parse_mode='Markdown')
@@ -658,7 +658,7 @@ class TradingTelegramBot:
             await update.message.reply_text(f"❌ Error: {e}")
 
     # Notification Methods
-    async def notify_trade_opened(self, side: str, size: float, price: float, stop_loss: float = None, take_profit: float = None, leverage: int = 10):
+    async def notify_trade_opened(self, side: str, size: float, price: float, stop_loss: float = None, take_profit: float = None, leverage: int = 15):
         """Send notification when trade is opened with stop loss and take profit details"""
         emoji = "📈" if side.lower() == "long" else "📉"
         notional_value = size * price
@@ -737,17 +737,21 @@ class TradingTelegramBot:
         emoji = "✅" if pnl > 0 else "❌"
         pnl_emoji = "💰" if pnl > 0 else "📉"
         
-        # Calculate percentage P&L
-        entry_value = abs(size) * entry
-        pnl_pct = (pnl / entry_value * 100) if entry_value > 0 else 0
+        # Calculate percentage P&L based on margin (actual capital risked)
+        # Position value = size * entry, Margin = position value / leverage (15x)
+        leverage = 15
+        position_value = abs(size) * entry
+        margin_used = position_value / leverage  # Actual capital risked
+        pnl_pct = (pnl / margin_used * 100) if margin_used > 0 else 0
         
         message = f"{emoji} **TRADE CLOSED** {pnl_emoji}\n\n"
         message += f"Direction: {side.upper()}\n"
         message += f"Size: {abs(size):.4f} ETH\n"
         message += f"Entry: ${entry:.2f}\n"
         message += f"Exit: ${exit_price:.2f}\n"
-        message += f"Price Change: ${exit_price - entry:+.2f} ({(exit_price/entry - 1)*100:+.2f}%)\n\n"
-        message += f"**P&L: ${pnl:+.2f} ({pnl_pct:+.2f}%)**\n\n"
+        message += f"Price Change: ${exit_price - entry:+.2f} ({(exit_price/entry - 1)*100:+.2f}%)\n"
+        message += f"Margin Used: ${margin_used:.2f}\n\n"
+        message += f"**P&L: ${pnl:+.2f} ({pnl_pct:+.2f}% on margin)**\n\n"
         message += f"Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
         
         await self.send_message(message)
@@ -833,7 +837,7 @@ class TradingTelegramBot:
         await self.send_message(message)
 
     async def notify_trade_opened_rsi(self, side: str, size: float, price: float, rsi_value: float, 
-                                       stop_loss: float = None, take_profit: float = None, leverage: int = 10):
+                                       stop_loss: float = None, take_profit: float = None, leverage: int = 15):
         """Send notification when trade is opened with RSI value included"""
         emoji = "📈" if side.lower() == "long" else "📉"
         rsi_emoji = "🟢" if side.lower() == "long" else "🔴"
