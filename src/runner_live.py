@@ -189,12 +189,17 @@ async def run_live_async():
         pnl.print_balance_sheet(equity, unrealized_pnl, current_pos)
         
         # ========== RSI-ONLY TRADING LOGIC ==========
-        # Get RSI decision - this is the ONLY indicator we use
-        rsi_decision = rsi_engine.make_decision(candles, current_pos, unrealized_pnl)
+        # Get RSI decision - pass timeframe for strategy selection
+        # 5m = exit at middle zone, 1m = exit at opposite extreme
+        rsi_decision = rsi_engine.make_decision(candles, current_pos, unrealized_pnl, timeframe=current_timeframe)
         
         print("\n" + "="*80)
         print(f"📊 RSI DECISION ENGINE ({current_timeframe.upper()} chart):")
         print(f"   ⏰ {get_timeframe_display()}")
+        if current_timeframe == "1m":
+            print(f"   📈 Strategy: Exit at OPPOSITE EXTREME (ride full wave)")
+        else:
+            print(f"   📈 Strategy: Exit at MIDDLE zone (take profit early)")
         print(f"   RSI Value: {rsi_decision.rsi_value:.2f}")
         print(f"   Action: {rsi_decision.action.upper()}")
         print(f"   Reason: {rsi_decision.reason}")

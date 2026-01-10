@@ -75,27 +75,37 @@ class RSITradingEngine:
         self, 
         candles: List[Dict[str, Any]], 
         current_position: Optional[Dict[str, Any]] = None,
-        unrealized_pnl: float = 0
+        unrealized_pnl: float = 0,
+        timeframe: str = "5m"
     ) -> RSIDecision:
         """
         Make a trading decision based ONLY on RSI.
         
-        Rules:
+        Rules for 5m chart (weekdays):
         - RSI > 66.80: Enter SHORT (if no position or in LONG)
         - RSI < 35.28: Enter LONG (if no position or in SHORT)
         - RSI near 50.44: Close if IN PROFIT only
         - No-Man Zone (35.28-66.80): NO new entries, only manage existing
         
+        Rules for 1m chart (weekends) - EXIT AT OPPOSITE EXTREME:
+        - RSI > 66.80: Enter SHORT, OR close LONG (exit at opposite entry)
+        - RSI < 35.28: Enter LONG, OR close SHORT (exit at opposite entry)
+        - No middle exit zone - ride the full wave!
+        
         Args:
             candles: OHLCV candle data
             current_position: Current position dict (size, entry, etc.)
             unrealized_pnl: Current unrealized P&L in dollars
+            timeframe: Trading timeframe ('1m' or '5m')
             
         Returns:
             RSIDecision with action and reasoning
         """
         rsi = self.calculate_rsi(candles, period=14)
         zone = self.get_zone(rsi)
+        
+        # Check if we're using 1-minute chart strategy (exit at extremes)
+        is_1m_strategy = timeframe == "1m"
         
         # Determine current position state
         has_position = current_position is not None and abs(current_position.get('size', 0)) > 0.0001
@@ -122,15 +132,27 @@ class RSITradingEngine:
                     confidence=0.9
                 )
             elif current_side == "long":
-                # We're long but RSI says short - FLIP position
-                return RSIDecision(
-                    action="close_flip",
-                    reason=f"RSI {rsi:.2f} OVERBOUGHT while LONG → CLOSE LONG and ENTER SHORT",
-                    rsi_value=rsi,
-                    stop_loss_pct=stop_loss,
-                    take_profit_pct=take_profit,
-                    confidence=0.85
-                )
+                # We're LONG and RSI hit overbought
+                if is_1m_strategy:
+                    # 1M STRATEGY: Close LONG at the opposite extreme (take profit at entry zone)
+                    return RSIDecision(
+                        action="close_profit",
+                        reason=f"[1M] RSI {rsi:.2f} hit OVERBOUGHT → CLOSE LONG at opposite extreme (P&L: ${unrealized_pnl:+.2f})",
+                        rsi_value=rsi,
+                        stop_loss_pct=stop_loss,
+                        take_profit_pct=take_profit,
+                        confidence=0.9
+                    )
+                else:
+                    # 5M STRATEGY: Flip position
+                    return RSIDecision(
+                        action="close_flip",
+                        reason=f"RSI {rsi:.2f} OVERBOUGHT while LONG → CLOSE LONG and ENTER SHORT",
+                        rsi_value=rsi,
+                        stop_loss_pct=stop_loss,
+                        take_profit_pct=take_profit,
+                        confidence=0.85
+                    )
             else:
                 # Already short, hold
                 return RSIDecision(
@@ -154,15 +176,27 @@ class RSITradingEngine:
                     confidence=0.9
                 )
             elif current_side == "short":
-                # We're short but RSI says long - FLIP position
-                return RSIDecision(
-                    action="close_flip",
-                    reason=f"RSI {rsi:.2f} OVERSOLD while SHORT → CLOSE SHORT and ENTER LONG",
-                    rsi_value=rsi,
-                    stop_loss_pct=stop_loss,
-                    take_profit_pct=take_profit,
-                    confidence=0.85
-                )
+                # We're SHORT and RSI hit oversold
+                if is_1m_strategy:
+                    # 1M STRATEGY: Close SHORT at the opposite extreme (take profit at entry zone)
+                    return RSIDecision(
+                        action="close_profit",
+                        reason=f"[1M] RSI {rsi:.2f} hit OVERSOLD → CLOSE SHORT at opposite extreme (P&L: ${unrealized_pnl:+.2f})",
+                        rsi_value=rsi,
+                        stop_loss_pct=stop_loss,
+                        take_profit_pct=take_profit,
+                        confidence=0.9
+                    )
+                else:
+                    # 5M STRATEGY: Flip position
+                    return RSIDecision(
+                        action="close_flip",
+                        reason=f"RSI {rsi:.2f} OVERSOLD while SHORT → CLOSE SHORT and ENTER LONG",
+                        rsi_value=rsi,
+                        stop_loss_pct=stop_loss,
+                        take_profit_pct=take_profit,
+                        confidence=0.85
+                    )
             else:
                 # Already long, hold
                 return RSIDecision(
@@ -174,9 +208,30 @@ class RSITradingEngine:
                     confidence=0.8
                 )
         
-        # 3. EXIT ZONE - Close ONLY if in profit
+        # 3. EXIT ZONE - Close ONLY if in profit (5M strategy only)
+        # For 1M strategy, we skip middle exits and wait for opposite extreme
         elif zone == "exit":
-            if has_position and unrealized_pnl > 0:
+            if is_1m_strategy:
+                # 1M STRATEGY: Don't exit at middle - hold until opposite extreme
+                if has_position:
+                    return RSIDecision(
+                        action="hold",
+                        reason=f"[1M] RSI {rsi:.2f} in middle zone - HOLDING until opposite extreme ({self.OVERBOUGHT if current_side == 'long' else self.OVERSOLD})",
+                        rsi_value=rsi,
+                        stop_loss_pct=stop_loss,
+                        take_profit_pct=take_profit,
+                        confidence=0.7
+                    )
+                else:
+                    return RSIDecision(
+                        action="wait",
+                        reason=f"[1M] RSI {rsi:.2f} in middle zone - Waiting for extreme entry",
+                        rsi_value=rsi,
+                        stop_loss_pct=stop_loss,
+                        take_profit_pct=take_profit,
+                        confidence=0.5
+                    )
+            elif has_position and unrealized_pnl > 0:
                 return RSIDecision(
                     action="close_profit",
                     reason=f"RSI {rsi:.2f} near {self.EXIT_ZONE} (EXIT ZONE) + IN PROFIT (${unrealized_pnl:+.2f}) → CLOSE POSITION",
@@ -209,14 +264,25 @@ class RSITradingEngine:
         # 4. NO-MAN ZONE - NO new entries, only hold or let stops/TPs work
         else:  # zone == "noman"
             if has_position:
-                return RSIDecision(
-                    action="hold",
-                    reason=f"RSI {rsi:.2f} in NO-MAN ZONE ({self.OVERSOLD}-{self.OVERBOUGHT}) → HOLDING position (let SL/TP work)",
-                    rsi_value=rsi,
-                    stop_loss_pct=stop_loss,
-                    take_profit_pct=take_profit,
-                    confidence=0.6
-                )
+                if is_1m_strategy:
+                    target = self.OVERBOUGHT if current_side == "long" else self.OVERSOLD
+                    return RSIDecision(
+                        action="hold",
+                        reason=f"[1M] RSI {rsi:.2f} in middle zone → HOLDING until RSI hits {target:.2f}",
+                        rsi_value=rsi,
+                        stop_loss_pct=stop_loss,
+                        take_profit_pct=take_profit,
+                        confidence=0.7
+                    )
+                else:
+                    return RSIDecision(
+                        action="hold",
+                        reason=f"RSI {rsi:.2f} in NO-MAN ZONE ({self.OVERSOLD}-{self.OVERBOUGHT}) → HOLDING position (let SL/TP work)",
+                        rsi_value=rsi,
+                        stop_loss_pct=stop_loss,
+                        take_profit_pct=take_profit,
+                        confidence=0.6
+                    )
             else:
                 return RSIDecision(
                     action="wait",
