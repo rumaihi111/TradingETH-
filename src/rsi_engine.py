@@ -134,10 +134,10 @@ class RSITradingEngine:
             elif current_side == "long":
                 # We're LONG and RSI hit overbought
                 if is_1m_strategy:
-                    # 1M STRATEGY: Close LONG at the opposite extreme (take profit at entry zone)
+                    # 1M STRATEGY: Close LONG at opposite extreme AND immediately open SHORT
                     return RSIDecision(
-                        action="close_profit",
-                        reason=f"[1M] RSI {rsi:.2f} hit OVERBOUGHT → CLOSE LONG at opposite extreme (P&L: ${unrealized_pnl:+.2f})",
+                        action="close_flip",
+                        reason=f"[1M] RSI {rsi:.2f} hit OVERBOUGHT → CLOSE LONG + OPEN SHORT immediately",
                         rsi_value=rsi,
                         stop_loss_pct=stop_loss,
                         take_profit_pct=take_profit,
@@ -178,10 +178,10 @@ class RSITradingEngine:
             elif current_side == "short":
                 # We're SHORT and RSI hit oversold
                 if is_1m_strategy:
-                    # 1M STRATEGY: Close SHORT at the opposite extreme (take profit at entry zone)
+                    # 1M STRATEGY: Close SHORT at opposite extreme AND immediately open LONG
                     return RSIDecision(
-                        action="close_profit",
-                        reason=f"[1M] RSI {rsi:.2f} hit OVERSOLD → CLOSE SHORT at opposite extreme (P&L: ${unrealized_pnl:+.2f})",
+                        action="close_flip",
+                        reason=f"[1M] RSI {rsi:.2f} hit OVERSOLD → CLOSE SHORT + OPEN LONG immediately",
                         rsi_value=rsi,
                         stop_loss_pct=stop_loss,
                         take_profit_pct=take_profit,
