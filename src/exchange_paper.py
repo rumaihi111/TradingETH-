@@ -62,7 +62,7 @@ class PaperExchange:
         print(f"📈 Leveraged {self.leverage}x: Position size={leveraged_size:.4f} ETH, Margin=${margin_required:.2f}")
         return {"status": "filled", "paper": True, "price": price, "size": leveraged_size, "side": side}
 
-    def close_position(self, symbol: str, size: float = None, max_slippage_pct: float = 0.5, price: float = None) -> Dict[str, Any]:
+    def close_position(self, symbol: str, size: float = None, max_slippage_pct: float = 0.2, price: float = None) -> Dict[str, Any]:
         if price is None:
             raise RuntimeError("Paper mode requires price input")
         if self.position["size"] == 0:

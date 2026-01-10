@@ -1,3 +1,4 @@
+import time
 from typing import Any, Dict, List, Optional
 
 from eth_account import Account
@@ -72,8 +73,8 @@ class HyperliquidClient:
             
         return positions
 
-    def place_market(self, symbol: str, side: str, size: float, max_slippage_pct: float, price: float = None) -> Dict[str, Any]:
-        """Place market order (price param for API compatibility, not used)"""
+    def place_market(self, symbol: str, side: str, size: float, max_slippage_pct: float, price: float = None, max_retries: int = 10, retry_delay: float = 2.0) -> Dict[str, Any]:
+        """Place market order with retry logic (price param for API compatibility, not used)"""
         is_buy = side.lower() == "long"
         slippage = max_slippage_pct / 100
         # Round size to 4 decimals to avoid Hyperliquid wire encoding errors
@@ -84,10 +85,35 @@ class HyperliquidClient:
             print(f"⚠️ Position size {size:.4f} ETH too small (min 0.001), skipping trade")
             return {"status": "error", "error": "Position size below minimum"}
         
-        print(f"🚨 LIVE TRADE: {side.upper()} {size:.4f} {symbol} with slippage {slippage*100:.1f}%")
-        result = self.exchange.market_open(symbol, is_buy=is_buy, sz=size, px=None, slippage=slippage)
-        print(f"📊 Order result: {result}")
-        return result
+        for attempt in range(1, max_retries + 1):
+            current_slippage = slippage + (0.001 * (attempt - 1))  # Increase slippage slightly each retry
+            print(f"🚨 LIVE TRADE (attempt {attempt}/{max_retries}): {side.upper()} {size:.4f} {symbol} with slippage {current_slippage*100:.2f}%")
+            
+            try:
+                result = self.exchange.market_open(symbol, is_buy=is_buy, sz=size, px=None, slippage=current_slippage)
+                print(f"📊 Order result: {result}")
+                
+                # Check if order was successful
+                if isinstance(result, dict):
+                    if result.get("status") == "ok":
+                        return result
+                    # Check for specific error that indicates we should retry
+                    error = result.get("response", {}).get("error") or result.get("error", "")
+                    if error and attempt < max_retries:
+                        print(f"⚠️ Order failed: {error}. Retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        continue
+                return result
+                
+            except Exception as e:
+                print(f"❌ Order attempt {attempt} failed: {e}")
+                if attempt < max_retries:
+                    print(f"🔄 Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    return {"status": "error", "error": str(e)}
+        
+        return {"status": "error", "error": "Max retries exceeded"}
 
     def place_trigger_order(self, symbol: str, side: str, size: float, trigger_price: float, is_stop: bool = True, reduce_only: bool = True) -> Dict[str, Any]:
         """Place stop loss or take profit trigger order
@@ -127,8 +153,8 @@ class HyperliquidClient:
             traceback.print_exc()
             return {"status": "error", "error": str(e)}
 
-    def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.5, price: float = None) -> Dict[str, Any]:
-        """Close position (price param for API compatibility, not used)"""
+    def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.2, price: float = None, max_retries: int = 10, retry_delay: float = 2.0) -> Dict[str, Any]:
+        """Close position with retry logic (price param for API compatibility, not used)"""
         slippage = max_slippage_pct / 100
         # Round size to 4 decimals if provided
         if size is not None:
@@ -142,8 +168,36 @@ class HyperliquidClient:
             entry_price = positions[0].get("entry_price", 0)
             position_size = abs(positions[0].get("size", 0))
         
-        print(f"🚨 CLOSING: {symbol} position")
-        result = self.exchange.market_close(symbol, sz=size, px=None, slippage=slippage)
+        result = None
+        for attempt in range(1, max_retries + 1):
+            current_slippage = slippage + (0.001 * (attempt - 1))  # Increase slippage slightly each retry
+            print(f"🚨 CLOSING (attempt {attempt}/{max_retries}): {symbol} position with slippage {current_slippage*100:.2f}%")
+            
+            try:
+                result = self.exchange.market_close(symbol, sz=size, px=None, slippage=current_slippage)
+                
+                # Check if order was successful
+                if isinstance(result, dict):
+                    if result.get("status") == "ok":
+                        break
+                    # Check for specific error that indicates we should retry
+                    error = result.get("response", {}).get("error") or result.get("error", "")
+                    if error and attempt < max_retries:
+                        print(f"⚠️ Close failed: {error}. Retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        continue
+                break
+                
+            except Exception as e:
+                print(f"❌ Close attempt {attempt} failed: {e}")
+                if attempt < max_retries:
+                    print(f"🔄 Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    return {"status": "error", "error": str(e), "pnl": 0}
+        
+        if result is None:
+            return {"status": "error", "error": "Max retries exceeded", "pnl": 0}
         
         # Try to extract PNL from Hyperliquid response
         pnl = 0
