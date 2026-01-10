@@ -191,19 +191,19 @@ RISK MANAGEMENT:
 - Use Second Brain's recommended SL/TP as guidance
 
 POSITION SIZING:
-- Bot uses 80% of available margin at 15x leverage
-- $70 margin = $1050 position value (15x)
-- position_fraction is IGNORED - always 0.8 internally
+- Bot uses 95% of available margin at 10x leverage
+- $70 margin = $700 position value (10x)
+- position_fraction is IGNORED - always 0.95 internally
 
 RESPONSE FORMAT:
 Return a JSON object with these fields:
 - side: "long", "short", or "flat"
-- position_fraction: 0.8 (IGNORED - bot always uses 80% of wallet)
+- position_fraction: 0.95 (IGNORED - bot always uses 95% of wallet)
 - stop_loss_pct: decimal (e.g., 0.05 = 5% stop from entry)
 - take_profit_pct: decimal (e.g., 0.10 = 10% profit target)
 - max_slippage_pct: decimal (e.g., 0.5 = 0.5% max slippage)
 
-Example: {"side": "long", "position_fraction": 0.8, "stop_loss_pct": 0.04, "take_profit_pct": 0.10, "max_slippage_pct": 0.5}
+Example: {"side": "long", "position_fraction": 0.95, "stop_loss_pct": 0.04, "take_profit_pct": 0.10, "max_slippage_pct": 0.5}
 
 CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown."""
 

@@ -307,7 +307,7 @@ async def run_live_async():
             # margin = how much USD we actually put in from wallet
             # notional_value = margin * leverage = position value
             leverage = 10
-            margin = equity * settings.max_position_fraction  # e.g., $940 * 0.8 = $752 actual USD committed
+            margin = equity * settings.max_position_fraction  # e.g., $940 * 0.95 = $893 actual USD committed
             notional_value = margin * leverage  # e.g., $752 * 10 = $7,520 position value
             
             if margin < 11:
