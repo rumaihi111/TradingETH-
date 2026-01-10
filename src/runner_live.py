@@ -1,6 +1,8 @@
 import time
 import asyncio
+from datetime import datetime
 from typing import Dict, Optional
+from zoneinfo import ZoneInfo
 
 import ccxt
 
@@ -17,6 +19,46 @@ from .rsi_engine import RSITradingEngine  # New RSI-only engine
 
 
 telegram_bot: Optional[TradingTelegramBot] = None
+
+# EST timezone for timeframe switching
+EST = ZoneInfo("America/New_York")
+
+
+def get_trading_timeframe() -> tuple[str, int]:
+    """
+    Determine the trading timeframe based on EST time.
+    
+    Schedule:
+    - Monday 12:00AM EST to Friday 5:59PM EST: 5-minute chart
+    - Friday 6:00PM EST to Sunday 11:59PM EST: 1-minute chart
+    
+    Returns:
+        tuple: (timeframe string for ccxt, sleep interval in seconds)
+    """
+    now_est = datetime.now(EST)
+    weekday = now_est.weekday()  # 0=Monday, 4=Friday, 5=Saturday, 6=Sunday
+    hour = now_est.hour
+    
+    # Weekend trading window: Friday 6PM EST to Sunday 11:59PM EST
+    is_weekend_window = (
+        (weekday == 4 and hour >= 18) or  # Friday 6PM+ EST
+        weekday == 5 or                    # Saturday (all day)
+        weekday == 6                       # Sunday (all day until midnight)
+    )
+    
+    if is_weekend_window:
+        # 1-minute chart for weekend trading
+        return "1m", 30  # Check every 30 seconds for 1m chart
+    else:
+        # 5-minute chart for weekday trading
+        return "5m", 60  # Check every 60 seconds for 5m chart
+
+
+def get_timeframe_display() -> str:
+    """Get a human-readable display of current timeframe mode"""
+    now_est = datetime.now(EST)
+    timeframe, _ = get_trading_timeframe()
+    return f"{timeframe.upper()} chart | EST: {now_est.strftime('%A %I:%M %p')}"
 
 
 async def run_live_async():
@@ -75,11 +117,24 @@ async def run_live_async():
     rate_limit_backoff = 60  # Start with 60 second backoff on rate limit
     
     print("✅ Initialization complete! Starting trading loop...\n")
+    
+    last_timeframe = None  # Track timeframe changes
 
     while True:
         try:
-            # Fetch latest 5m candles for analysis
-            ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=50)
+            # Get dynamic timeframe based on EST time
+            current_timeframe, sleep_interval = get_trading_timeframe()
+            
+            # Log timeframe changes
+            if current_timeframe != last_timeframe:
+                print(f"\n⏰ TIMEFRAME SWITCH: Now using {current_timeframe.upper()} chart")
+                print(f"   {get_timeframe_display()}")
+                if telegram_bot:
+                    await telegram_bot.send_message(f"⏰ Timeframe switched to {current_timeframe.upper()} chart\n📅 {get_timeframe_display()}")
+                last_timeframe = current_timeframe
+            
+            # Fetch candles using dynamic timeframe
+            ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe=current_timeframe, limit=50)
             candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
             price = candles[-1]["close"]
             
@@ -138,7 +193,8 @@ async def run_live_async():
         rsi_decision = rsi_engine.make_decision(candles, current_pos, unrealized_pnl)
         
         print("\n" + "="*80)
-        print(f"📊 RSI DECISION ENGINE:")
+        print(f"📊 RSI DECISION ENGINE ({current_timeframe.upper()} chart):")
+        print(f"   ⏰ {get_timeframe_display()}")
         print(f"   RSI Value: {rsi_decision.rsi_value:.2f}")
         print(f"   Action: {rsi_decision.action.upper()}")
         print(f"   Reason: {rsi_decision.reason}")
@@ -159,21 +215,21 @@ async def run_live_async():
         # 1. WAIT - No action, just monitor
         if rsi_decision.action == "wait":
             print(f"⏸️  RSI in no-entry zone, waiting for extreme...")
-            await asyncio.sleep(60)  # Check again in 1 minute
+            await asyncio.sleep(sleep_interval)  # Dynamic: 30s for 1m, 60s for 5m
             continue
         
         # 2. HOLD - Keep current position, don't close
         if rsi_decision.action == "hold":
             print(f"✊ HOLDING position - RSI: {rsi_decision.rsi_value:.2f}")
             print(f"   Let stop loss and take profit orders work")
-            await asyncio.sleep(60)  # Check again in 1 minute
+            await asyncio.sleep(sleep_interval)  # Dynamic: 30s for 1m, 60s for 5m
             continue
         
         # 3. CLOSE_PROFIT - Close position because RSI hit exit zone AND we're in profit
         if rsi_decision.action == "close_profit":
             if current_pos:
                 print(f"💰 CLOSING FOR PROFIT - RSI at exit zone + profit")
-                ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
+                ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe=current_timeframe, limit=1)
                 close_price = ohlcv_close[0][4]
                 
                 if use_paper:
@@ -198,14 +254,14 @@ async def run_live_async():
                 print(f"✅ Position closed @ ${close_price:.2f} | P&L: ${pnl_value:+.2f}")
                 guard.record_close()
             
-            await asyncio.sleep(300)  # Wait 5 min before next trade
+            await asyncio.sleep(sleep_interval * 5)  # Wait 5x sleep interval before next trade
             continue
         
         # 4. CLOSE_FLIP - Close current position and open opposite
         if rsi_decision.action == "close_flip":
             if current_pos:
                 print(f"🔄 FLIPPING POSITION - RSI moved to opposite extreme")
-                ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
+                ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe=current_timeframe, limit=1)
                 close_price = ohlcv_close[0][4]
                 
                 if use_paper:
@@ -233,7 +289,7 @@ async def run_live_async():
         # Check cooldown for new entries
         if not guard.allow_new_trade():
             print(f"⏸️  Cooldown active, waiting...")
-            await asyncio.sleep(60)
+            await asyncio.sleep(sleep_interval)  # Dynamic based on timeframe
             continue
         
         # 5. OPEN_LONG or OPEN_SHORT - Open new position
@@ -341,8 +397,9 @@ async def run_live_async():
                 )
                 print(f"🎯 Take Profit: ${tp_price:.2f}")
         
-        # Wait before next cycle (minimum 60 seconds between checks)
-        await asyncio.sleep(60)
+        # Wait before next cycle (dynamic based on timeframe)
+        # 1m chart = 30 sec checks, 5m chart = 60 sec checks
+        await asyncio.sleep(sleep_interval)
 
 
 def run_live():

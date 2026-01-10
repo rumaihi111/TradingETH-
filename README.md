@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Intelligent ETH/USDC Trading Bot with Dual-Brain AI Analysis**
+**Intelligent ETH/USDC Trading Bot with RSI Engine + AI Analysis**
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -12,8 +12,13 @@
 
 ## 🌟 Features
 
-### 🧠 Dual-Brain AI System
-- **Main Brain (Claude Sonnet 4)**: Visual chart analysis, pattern recognition, and decision making
+### 📈 RSI Trading Engine
+- **Pure RSI-based entries and exits** - Technical indicator-driven decisions
+- **Zone-based trading logic** - Overbought/Oversold/Exit/No-Man zones
+- **Automatic position management** - Entry, profit-taking, and flip signals
+
+### 🧠 AI Analysis System
+- **Main Brain (Claude)**: Visual chart analysis, pattern recognition, and decision validation
 - **Second Brain**: Advanced price action analysis focusing on:
   - Market expectations vs delivery
   - Second reactions and confirmations
@@ -36,11 +41,11 @@
 
 ### 💰 Risk Management
 - **Leverage**: 10x on all trades
-- **Position Sizing**: 80% of available margin
-  - Example: $70 margin = $800 position value
+- **Position Sizing**: 95% of available margin (configurable)
+  - Example: $70 margin = ~$665 position value
 - **Intelligent Stop Loss**: Based on market structure, phase, and volatility
 - **Take Profit Targets**: 30-60 minute targets with 1.5x-3x risk/reward
-- **Trade Frequency**: Max 2 trades/hour with 30-minute cooldown
+- **Trade Frequency**: Up to 45 trades/hour (configurable, no cooldown by default)
 
 ### 📱 Telegram Integration
 - Real-time trade notifications with:
@@ -56,6 +61,12 @@
   - `/status` - Bot status
   - `/withdraw` - Withdraw funds
   - `/deposit` - Deposit address
+  - `/rsi` - Current RSI value and zone
+  - `/analysis` - AI market analysis
+  - `/price` - Current ETH price
+  - `/closetrade` - Manually close position
+  - `/data` - Export trade data
+  - `/help` - Command reference
 
 ### 📈 Trading Features
 - Live 5-minute candlestick analysis
@@ -105,9 +116,9 @@ ANTHROPIC_API_KEY=your_claude_api_key
 # Trading Configuration
 PAPER_MODE=false  # Set to true for paper trading
 PAPER_INITIAL_EQUITY=10000
-MAX_POSITION_FRACTION=0.8  # 80% of wallet
-MAX_TRADES_PER_HOUR=2
-COOLDOWN_MINUTES=30
+MAX_POSITION_FRACTION=0.95  # 95% of wallet
+MAX_TRADES_PER_HOUR=45
+COOLDOWN_MINUTES=0
 
 # Telegram (Optional)
 TELEGRAM_TOKEN=your_telegram_bot_token
@@ -122,12 +133,14 @@ WALLET_ADDRESS=your_wallet_address
 
 **Live Trading:**
 ```bash
+python start.py
+# or
 python -m src.runner_live
 ```
 
 **Paper Trading (Simulation):**
 ```bash
-PAPER_MODE=true python -m src.runner_live
+PAPER_MODE=true python start.py
 ```
 
 **Backtest (Coming Soon):**
@@ -145,20 +158,23 @@ python -m src.runner_backtest
 TradingETH-/
 ├── src/
 │   ├── runner_live.py         # Main trading loop
-│   ├── ai_client.py            # Main AI brain (Claude)
-│   ├── second_brain.py         # Advanced price action analysis
-│   ├── indicators.py           # Technical indicators (RSI, ATR, etc.)
+│   ├── runner_backtest.py     # Backtesting engine
+│   ├── rsi_engine.py          # RSI trading engine (core logic)
+│   ├── ai_client.py           # Main AI brain (Claude)
+│   ├── second_brain.py        # Advanced price action analysis
+│   ├── indicators.py          # Technical indicators (RSI, ATR, etc.)
 │   ├── exchange_hyperliquid.py # Hyperliquid API client
-│   ├── exchange_paper.py       # Paper trading simulator
-│   ├── telegram_bot.py         # Telegram notifications
-│   ├── risk.py                 # Risk management
-│   ├── pnl_tracker.py          # P&L tracking
-│   ├── history_store.py        # Decision history
-│   ├── trade_logger.py         # Trade logging
-│   └── config.py               # Configuration management
-├── scripts/                    # Utility scripts
-├── requirements.txt            # Python dependencies
-└── .env                        # Environment configuration
+│   ├── exchange_paper.py      # Paper trading simulator
+│   ├── telegram_bot.py        # Telegram bot & notifications
+│   ├── risk.py                # Risk management
+│   ├── pnl_tracker.py         # P&L tracking
+│   ├── history_store.py       # Decision history
+│   ├── trade_logger.py        # Trade logging
+│   └── config.py              # Configuration management
+├── scripts/                   # Utility scripts
+├── requirements.txt           # Python dependencies
+├── start.py                   # Entry point with crash recovery
+└── .env                       # Environment configuration
 ```
 
 ### Trading Flow
@@ -166,33 +182,35 @@ TradingETH-/
 ```
 ┌─────────────────────┐
 │ Fetch 5m Candles    │
+│ (KuCoin ETH/USDT)   │
 └──────────┬──────────┘
            │
            ▼
 ┌─────────────────────┐
-│ Calculate RSI       │
+│ RSI Engine          │
+│ Calculate RSI(14)   │
 └──────────┬──────────┘
            │
            ▼
-      ┌────────┐
-      │RSI > 66.80?│───YES──> SHORT SIGNAL
-      └────┬───┘
-           │
+      ┌────────────┐
+      │RSI > 66.80?│───YES──► SHORT SIGNAL
+      └────┬───────┘
+           │NO
            ▼
-      ┌────────┐
-      │RSI < 35.28?│───YES──> LONG SIGNAL
-      └────┬───┘
-           │
+      ┌────────────┐
+      │RSI < 35.28?│───YES──► LONG SIGNAL
+      └────┬───────┘
+           │NO
+           ▼
+      ┌────────────┐
+      │In Exit Zone│───YES──► CLOSE IF PROFIT
+      │(47-54 RSI) │
+      └────┬───────┘
+           │NO
            ▼
 ┌─────────────────────┐
-│ Second Brain        │
-│ Analysis            │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Main AI Decision    │
-│ (Claude)            │
+│ AI Analysis         │
+│ (Claude + Charts)   │
 └──────────┬──────────┘
            │
            ▼
@@ -202,7 +220,8 @@ TradingETH-/
            │
            ▼
 ┌─────────────────────┐
-│ Execute Trade       │
+│ Execute on          │
+│ Hyperliquid (10x)   │
 └──────────┬──────────┘
            │
            ▼
@@ -213,7 +232,30 @@ TradingETH-/
 
 ---
 
-## 📊 Second Brain Analysis
+## 📊 RSI Trading Engine
+
+The RSI Engine is the core decision-making module:
+
+### RSI Zones
+
+| Zone | RSI Range | Action |
+|------|-----------|--------|
+| **Overbought** | > 66.80 | Enter SHORT |
+| **Oversold** | < 35.28 | Enter LONG |
+| **Exit Zone** | 47.44 - 53.44 | Close if profitable |
+| **No-Man Zone** | 35.28 - 66.80 | No new entries |
+
+### Decision Types
+- `open_long` - Enter new long position
+- `open_short` - Enter new short position  
+- `close_profit` - Close profitable position in exit zone
+- `close_flip` - Close position and flip direction
+- `hold` - Maintain current position
+- `wait` - No position, waiting for signal
+
+---
+
+## 🧠 Second Brain Analysis
 
 The Second Brain performs deep market analysis:
 
@@ -244,13 +286,14 @@ The Second Brain performs deep market analysis:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `MAX_POSITION_FRACTION` | 0.8 | 80% of wallet per trade |
+| `MAX_POSITION_FRACTION` | 0.95 | 95% of wallet per trade |
 | `LEVERAGE` | 10x | Fixed leverage multiplier |
-| `MAX_TRADES_PER_HOUR` | 2 | Rate limiting |
-| `COOLDOWN_MINUTES` | 30 | Time between trades |
+| `MAX_TRADES_PER_HOUR` | 45 | Rate limiting |
+| `COOLDOWN_MINUTES` | 0 | Time between trades (disabled) |
 | `RSI_OVERBOUGHT` | 66.80 | Short trigger level |
 | `RSI_OVERSOLD` | 35.28 | Long trigger level |
 | `RSI_NEUTRAL` | 50.44 | Exit zone |
+| `EXIT_ZONE_RANGE` | ±3.0 | Range around exit zone |
 
 ### Stop Loss & Take Profit
 
@@ -271,8 +314,14 @@ Calculated intelligently based on:
 | `/winrate` | Display win rate and trading statistics |
 | `/pnl` | Show P&L report with percentage gains |
 | `/status` | Bot status and current position |
+| `/rsi` | Current RSI value and zone classification |
+| `/analysis` | Get AI market analysis |
+| `/price` | Current ETH price |
+| `/closetrade` | Manually close current position |
+| `/data` | Export trade history data |
 | `/deposit` | Get deposit address for funding |
 | `/withdraw <amount> <address>` | Withdraw USDC to external wallet |
+| `/help` | Show all available commands |
 
 ### Notification Types
 
@@ -410,6 +459,7 @@ MIT License - see LICENSE file for details
 - Built with [Hyperliquid Python SDK](https://github.com/hyperliquid-dex/hyperliquid-python-sdk)
 - Powered by [Anthropic Claude](https://www.anthropic.com/)
 - Chart generation with [mplfinance](https://github.com/matplotlib/mplfinance)
+- Price data from [KuCoin](https://www.kucoin.com/) via CCXT
 
 ---
 
@@ -418,5 +468,7 @@ MIT License - see LICENSE file for details
 **Made with ❤️ for Asher Shepherd Newton**
 
 *Trade smart, trade safe* 🚀
+
+*Last updated: January 2026*
 
 </div>
