@@ -153,7 +153,7 @@ class HyperliquidClient:
             traceback.print_exc()
             return {"status": "error", "error": str(e)}
 
-    def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.2, price: float = None, max_retries: int = 10, retry_delay: float = 2.0) -> Dict[str, Any]:
+    def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.5, price: float = None, max_retries: int = 10, retry_delay: float = 2.0) -> Dict[str, Any]:
         """Close position with retry logic (price param for API compatibility, not used)"""
         slippage = max_slippage_pct / 100
         # Round size to 4 decimals if provided
