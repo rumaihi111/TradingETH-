@@ -1,5 +1,5 @@
 """
-GG33 Numerology Module - Life Path Calculator
+Zorak Corp Numerology Module - Life Path Calculator
 
 Used to determine if trading is allowed on a given day.
 Days with Life Path number 3 are blocked from trading.
@@ -18,9 +18,9 @@ def reduce_to_single_digit(n: int) -> int:
 
 def calculate_life_path(target_date: Union[datetime, date]) -> int:
     """
-    Calculate the GG33 Life Path number for a given date.
+    Calculate the Zorak Corp Life Path number for a given date.
     
-    GG33 Method:
+    Zorak Corp Method:
     1. Reduce month to single digit
     2. Reduce day to single digit
     3. Reduce year to single digit
@@ -62,7 +62,7 @@ def calculate_life_path(target_date: Union[datetime, date]) -> int:
 
 def is_trading_allowed_today() -> tuple[bool, int, str]:
     """
-    Check if trading is allowed today based on GG33 numerology.
+    Check if trading is allowed today based on Zorak Corp numerology.
     
     Returns:
         tuple: (is_allowed, life_path_number, explanation)
@@ -76,7 +76,7 @@ def is_trading_allowed_today() -> tuple[bool, int, str]:
             f"🔢 Today's Life Path: {life_path}\n"
             f"📅 Date: {today.strftime('%m/%d/%Y')}\n"
             f"⛔ Trading BLOCKED - Life Path 3 day\n"
-            f"💡 Per GG33 numerology, avoid trading on Life Path 3 days"
+            f"💡 Per Zorak Corp numerology, avoid trading on Life Path 3 days"
         )
         return False, life_path, explanation
     
@@ -117,8 +117,8 @@ def get_life_path_breakdown(target_date: Union[datetime, date] = None) -> str:
     life_path = reduce_to_single_digit(total)
     
     breakdown = f"""
-🔢 GG33 Life Path Calculation
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔢 Zorak Corp Life Path Calculation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 Date: {target_date.strftime('%B %d, %Y')} → {month:02d}/{day:02d}/{year}
 
 Step 1 - Reduce each part:

@@ -124,7 +124,7 @@ async def run_live_async():
 
     while True:
         try:
-            # ========== GG33 NUMEROLOGY CHECK ==========
+            # ========== ZORAK CORP NUMEROLOGY CHECK ==========
             # Check if trading is allowed today (Life Path 3 = no trading)
             today = datetime.now().date()
             if today != last_numerology_check_date:
