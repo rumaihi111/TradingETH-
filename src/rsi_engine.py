@@ -24,9 +24,9 @@ class RSITradingEngine:
     RSI is the ONLY indicator used for entries and exits.
     """
     
-    # RSI Thresholds
+    # RSI Thresholds (1-min chart)
     OVERBOUGHT = 66.80      # Enter SHORT when RSI goes above this
-    OVERSOLD = 35.28        # Enter LONG when RSI goes below this
+    OVERSOLD = 32.70        # Enter LONG when RSI goes below this
     EXIT_ZONE = 50.44       # Close position if in profit and RSI near this
     EXIT_ZONE_RANGE = 3.0   # +/- range around EXIT_ZONE
     
