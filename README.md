@@ -1,474 +1,135 @@
-# 🤖 TradingETH - Advanced AI Trading Bot
+# TradingETH
 
 <div align="center">
 
-**Intelligent ETH/USDC Trading Bot with RSI Engine + AI Analysis**
+![ETH Trading Bot](https://img.shields.io/badge/ETH-Trading%20Bot-627EEA?style=for-the-badge&logo=ethereum&logoColor=white)
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Hyperliquid](https://img.shields.io/badge/Exchange-Hyperliquid-purple.svg)](https://hyperliquid.xyz)
+**Automated ETH/USDC perpetual trading on Hyperliquid**
+
+[![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Hyperliquid](https://img.shields.io/badge/Hyperliquid-DEX-8B5CF6?style=flat-square)](https://hyperliquid.xyz)
+[![Claude AI](https://img.shields.io/badge/Claude-AI-FF6B6B?style=flat-square)](https://anthropic.com)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 </div>
 
-## 🌟 Features
-
-### 📈 RSI Trading Engine
-- **Pure RSI-based entries and exits** - Technical indicator-driven decisions
-- **Zone-based trading logic** - Overbought/Oversold/Exit/No-Man zones
-- **Automatic position management** - Entry, profit-taking, and flip signals
-
-### 🧠 AI Analysis System
-- **Main Brain (Claude)**: Visual chart analysis, pattern recognition, and decision validation
-- **Second Brain**: Advanced price action analysis focusing on:
-  - Market expectations vs delivery
-  - Second reactions and confirmations
-  - Speed changes and momentum
-  - Trapped traders identification
-  - Market psychology and indifference detection
-
-### 📊 Technical Analysis
-- **RSI Strategy** (14-period on 5-minute charts):
-  - RSI > 66.80 → Enter SHORT
-  - RSI < 35.28 → Enter LONG
-  - RSI ≈ 50.44 → EXIT ZONE (close if profitable)
-  - No-Man Zone (35.28-66.80) → No new entries, only exits
-
-- **Visual Chart Analysis**:
-  - Chart patterns (triangles, flags, head & shoulders, wedges)
-  - Support/resistance levels
-  - Candlestick patterns (engulfing, doji, hammers)
-  - Volume patterns and divergences
-
-### 💰 Risk Management
-- **Leverage**: 10x on all trades
-- **Position Sizing**: 95% of available margin (configurable)
-  - Example: $70 margin = ~$665 position value
-- **Intelligent Stop Loss**: Based on market structure, phase, and volatility
-- **Take Profit Targets**: 30-60 minute targets with 1.5x-3x risk/reward
-- **Trade Frequency**: Up to 45 trades/hour (configurable, no cooldown by default)
-
-### 📱 Telegram Integration
-- Real-time trade notifications with:
-  - Entry price and position size
-  - Stop loss and take profit levels
-  - Expected profit/loss calculations
-  - Risk/reward ratios
-  - Position updates
-- Interactive commands:
-  - `/balance` - Wallet balance and positions
-  - `/winrate` - Trading statistics
-  - `/pnl` - Profit/Loss report
-  - `/status` - Bot status
-  - `/withdraw` - Withdraw funds
-  - `/deposit` - Deposit address
-  - `/rsi` - Current RSI value and zone
-  - `/analysis` - AI market analysis
-  - `/price` - Current ETH price
-  - `/closetrade` - Manually close position
-  - `/data` - Export trade data
-  - `/help` - Command reference
-
-### 📈 Trading Features
-- Live 5-minute candlestick analysis
-- Automatic position management
-- Paper trading mode for testing
-- Trade history and P&L tracking
-- Liquidation protection
-- Rate limit handling
-
 ---
 
-## 🚀 Quick Start
+## Overview
 
-### Prerequisites
-- Python 3.9 or higher
-- Hyperliquid account (testnet or mainnet)
-- Anthropic API key (Claude)
-- Telegram bot (optional)
+TradingETH is an automated trading bot that combines RSI-based technical analysis with AI-powered market insights. It trades ETH perpetuals on Hyperliquid with 10x leverage, operating 24/7 with built-in risk management.
 
-### Installation
+## Strategy
 
-1. **Clone the repository**
+### RSI Engine (Period: 7)
+
+| Zone | RSI Range | Action |
+|:-----|:----------|:-------|
+| 🔴 Short | 68.83 – 87 | Enter SHORT |
+| 🟢 Long | 29 – 31 | Enter LONG |
+| 🟡 Exit | 49 – 51 | Close position |
+| ⚪ Neutral | Outside zones | Hold / Wait |
+
+The bot monitors 5-minute candles and executes trades when RSI enters the defined zones. Positions are closed at the middle zone (49-51) when in profit.
+
+### Risk Management
+
+- **Leverage:** 10x
+- **Position Size:** 95% of available margin
+- **Stop Loss:** Dynamic, based on market structure
+- **Take Profit:** 1.5x – 3x risk/reward ratio
+
+## Quick Start
+
+### 1. Clone & Install
+
 ```bash
-git clone https://github.com/yourusername/TradingETH-.git
+git clone https://github.com/rumaihi111/TradingETH-.git
 cd TradingETH-
-```
-
-2. **Install dependencies**
-```bash
 pip install -r requirements.txt
 ```
 
-3. **Configure environment variables**
+### 2. Configure
 
-Create a `.env` file in the root directory:
+Create `.env` in the project root:
 
-```bash
-# Hyperliquid Configuration
-PRIVATE_KEY=your_private_key_here
-ACCOUNT_ADDRESS=your_main_wallet_address
-HYPERLIQUID_TESTNET=false
-HYPERLIQUID_BASE_URL=  # Optional override
-
-# AI Configuration
+```env
+# Required
+PRIVATE_KEY=your_hyperliquid_private_key
 ANTHROPIC_API_KEY=your_claude_api_key
 
-# Trading Configuration
-PAPER_MODE=false  # Set to true for paper trading
+# Optional
+ACCOUNT_ADDRESS=your_wallet_address
+HYPERLIQUID_TESTNET=false
+PAPER_MODE=false
 PAPER_INITIAL_EQUITY=10000
-MAX_POSITION_FRACTION=0.95  # 95% of wallet
-MAX_TRADES_PER_HOUR=45
-COOLDOWN_MINUTES=0
 
-# Telegram (Optional)
-TELEGRAM_TOKEN=your_telegram_bot_token
+# Telegram Notifications
+TELEGRAM_TOKEN=your_bot_token
 TELEGRAM_CHAT_ID=your_chat_id
-
-# Blockchain RPC (Optional)
-RPC_URL=your_rpc_url
-WALLET_ADDRESS=your_wallet_address
 ```
 
-### Running the Bot
+### 3. Run
 
-**Live Trading:**
 ```bash
 python start.py
-# or
-python -m src.runner_live
 ```
 
-**Paper Trading (Simulation):**
+**Paper Trading:**
 ```bash
 PAPER_MODE=true python start.py
 ```
 
-**Backtest (Coming Soon):**
-```bash
-python -m src.runner_backtest
-```
-
----
-
-## 🧩 Architecture
-
-### Module Overview
-
-```
-TradingETH-/
-├── src/
-│   ├── runner_live.py         # Main trading loop
-│   ├── runner_backtest.py     # Backtesting engine
-│   ├── rsi_engine.py          # RSI trading engine (core logic)
-│   ├── ai_client.py           # Main AI brain (Claude)
-│   ├── second_brain.py        # Advanced price action analysis
-│   ├── indicators.py          # Technical indicators (RSI, ATR, etc.)
-│   ├── exchange_hyperliquid.py # Hyperliquid API client
-│   ├── exchange_paper.py      # Paper trading simulator
-│   ├── telegram_bot.py        # Telegram bot & notifications
-│   ├── risk.py                # Risk management
-│   ├── pnl_tracker.py         # P&L tracking
-│   ├── history_store.py       # Decision history
-│   ├── trade_logger.py        # Trade logging
-│   └── config.py              # Configuration management
-├── scripts/                   # Utility scripts
-├── requirements.txt           # Python dependencies
-├── start.py                   # Entry point with crash recovery
-└── .env                       # Environment configuration
-```
-
-### Trading Flow
-
-```
-┌─────────────────────┐
-│ Fetch 5m Candles    │
-│ (KuCoin ETH/USDT)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ RSI Engine          │
-│ Calculate RSI(14)   │
-└──────────┬──────────┘
-           │
-           ▼
-      ┌────────────┐
-      │RSI > 66.80?│───YES──► SHORT SIGNAL
-      └────┬───────┘
-           │NO
-           ▼
-      ┌────────────┐
-      │RSI < 35.28?│───YES──► LONG SIGNAL
-      └────┬───────┘
-           │NO
-           ▼
-      ┌────────────┐
-      │In Exit Zone│───YES──► CLOSE IF PROFIT
-      │(47-54 RSI) │
-      └────┬───────┘
-           │NO
-           ▼
-┌─────────────────────┐
-│ AI Analysis         │
-│ (Claude + Charts)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Calculate SL/TP     │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Execute on          │
-│ Hyperliquid (10x)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ Send Telegram Alert │
-└─────────────────────┘
-```
-
----
-
-## 📊 RSI Trading Engine
-
-The RSI Engine is the core decision-making module:
-
-### RSI Zones
-
-| Zone | RSI Range | Action |
-|------|-----------|--------|
-| **Overbought** | > 66.80 | Enter SHORT |
-| **Oversold** | < 35.28 | Enter LONG |
-| **Exit Zone** | 47.44 - 53.44 | Close if profitable |
-| **No-Man Zone** | 35.28 - 66.80 | No new entries |
-
-### Decision Types
-- `open_long` - Enter new long position
-- `open_short` - Enter new short position  
-- `close_profit` - Close profitable position in exit zone
-- `close_flip` - Close position and flip direction
-- `hold` - Maintain current position
-- `wait` - No position, waiting for signal
-
----
-
-## 🧠 Second Brain Analysis
-
-The Second Brain performs deep market analysis:
-
-### 10 Key Analysis Points
-
-1. **Expectations vs Delivery** - Did price do what was expected?
-2. **Second Reactions** - Confirmation or exhaustion signals
-3. **Speed Changes** - Acceleration/deceleration tracking
-4. **Price Indifference** - When big moves get absorbed
-5. **Hesitation Detection** - Where price pauses vs clean passes
-6. **If-Then Logic Trees** - Conditional reasoning
-7. **Time Pullbacks** - Sideways consolidation vs price retracements
-8. **Behavior Changes** - Regime shift detection
-9. **Emotional State** - FOMO, Fear, or Calm alignment
-10. **Trapped Traders** - Identifying fuel for moves
-
-### Market Phase Classification
-- **Accumulation**: Tight, sideways, overlapping
-- **Expansion**: Fast, directional, long candles
-- **Distribution**: Stalling after expansion
-- **Retracement**: Controlled pullback
-
----
-
-## 🔧 Configuration
-
-### Risk Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `MAX_POSITION_FRACTION` | 0.95 | 95% of wallet per trade |
-| `LEVERAGE` | 10x | Fixed leverage multiplier |
-| `MAX_TRADES_PER_HOUR` | 45 | Rate limiting |
-| `COOLDOWN_MINUTES` | 0 | Time between trades (disabled) |
-| `RSI_OVERBOUGHT` | 66.80 | Short trigger level |
-| `RSI_OVERSOLD` | 35.28 | Long trigger level |
-| `RSI_NEUTRAL` | 50.44 | Exit zone |
-| `EXIT_ZONE_RANGE` | ±3.0 | Range around exit zone |
-
-### Stop Loss & Take Profit
-
-Calculated intelligently based on:
-- Market volatility (ATR)
-- Market phase (accumulation, expansion, etc.)
-- Support/resistance levels
-- Typical range: SL 3-8%, TP 5-15%
-- Target R:R ratio: 1.5:1 to 3:1
-
----
-
-## 📱 Telegram Commands
+## Telegram Commands
 
 | Command | Description |
-|---------|-------------|
-| `/balance` | Show current wallet balance and open positions |
-| `/winrate` | Display win rate and trading statistics |
-| `/pnl` | Show P&L report with percentage gains |
-| `/status` | Bot status and current position |
-| `/rsi` | Current RSI value and zone classification |
-| `/analysis` | Get AI market analysis |
+|:--------|:------------|
+| `/balance` | Wallet balance & positions |
+| `/pnl` | Profit/Loss report |
+| `/winrate` | Trading statistics |
+| `/rsi` | Current RSI value |
+| `/analysis` | AI market analysis |
 | `/price` | Current ETH price |
-| `/closetrade` | Manually close current position |
-| `/data` | Export trade history data |
-| `/deposit` | Get deposit address for funding |
-| `/withdraw <amount> <address>` | Withdraw USDC to external wallet |
-| `/help` | Show all available commands |
+| `/closetrade` | Close current position |
+| `/status` | Bot status |
+| `/help` | All commands |
 
-### Notification Types
+## Architecture
 
-- **🔔 Trade Opened** - Entry price, size, SL/TP levels
-- **✅ Trade Closed** - Exit price, P&L, percentage gain
-- **📊 Position Updates** - Real-time position monitoring
-- **🧠 Signal Received** - AI decision with RSI and confidence
-- **⚪ Neutral** - Position closed, waiting for signal
-
----
-
-## 🛡️ Safety Features
-
-- **Liquidation Protection**: Monitors unrealized losses
-- **Rate Limit Handling**: Exponential backoff on API limits
-- **Position Verification**: Confirms orders executed correctly
-- **Minimum Order Size**: $11 minimum to meet exchange requirements
-- **Cooldown Enforcement**: Prevents overtrading
-- **Paper Mode**: Test strategies without real money
-
----
-
-## 📂 Data Storage
-
-### History Store
-- File: `data/claude_history.jsonl`
-- Stores AI decisions for 24 hours
-- Rolls over daily, keeps last 3 hours
-
-### Trade Log
-- File: `data/trades.jsonl`
-- Complete trade history with entry/exit
-- P&L tracking per trade
-
-### CSV Export
-- File: `trade_history.csv`
-- Exportable trade data for analysis
-
----
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Bot won't start:**
-```bash
-# Check environment variables
-python -c "from src.config import load_settings; print(load_settings())"
+```
+src/
+├── runner_live.py      # Main trading loop
+├── rsi_engine.py       # RSI strategy logic
+├── ai_client.py        # Claude AI integration
+├── exchange_*.py       # Exchange connectors
+├── telegram_bot.py     # Notifications
+├── risk.py             # Risk management
+└── config.py           # Configuration
 ```
 
-**No trades executing:**
-- Verify RSI is outside no-man zone (35.28-66.80)
-- Check cooldown timer (30 minutes between trades)
-- Ensure minimum equity ($11+)
+## Deployment
 
-**Rate limit errors:**
-- Bot automatically handles with exponential backoff
-- Wait 60-600 seconds before retry
+### Railway
 
-**Position not found:**
-- Order may be below minimum size
-- Check account balance
-- Verify exchange connectivity
+1. Connect GitHub repo to Railway
+2. Add environment variables
+3. Deploy
 
----
-
-## 🚧 Deployment
-
-### Railway.app
-
-1. Connect your GitHub repository
-2. Add environment variables in Railway dashboard
-3. Deploy automatically on push
-
-### Local Systemd Service
+### Local Service
 
 ```bash
-# Copy service file
 sudo cp scripts/tradingbot.service.example /etc/systemd/system/tradingbot.service
-
-# Edit paths and user
-sudo nano /etc/systemd/system/tradingbot.service
-
-# Enable and start
-sudo systemctl enable tradingbot
-sudo systemctl start tradingbot
-
-# Check status
-sudo systemctl status tradingbot
+sudo systemctl enable --now tradingbot
 ```
 
----
+## Disclaimer
 
-## 📈 Performance Monitoring
-
-- Track win rate with `/winrate`
-- Monitor P&L with `/pnl`
-- Review trade history in `trade_history.csv`
-- Analyze decisions in `claude_history.jsonl`
-
----
-
-## ⚠️ Disclaimer
-
-**This bot is for educational purposes only.**
-
-- Trading cryptocurrencies involves substantial risk
-- Past performance does not guarantee future results
-- Only trade with money you can afford to lose
-- Always test with paper trading first
-- Not financial advice - DYOR (Do Your Own Research)
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
----
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
----
-
-## 🙏 Acknowledgments
-
-- Built with [Hyperliquid Python SDK](https://github.com/hyperliquid-dex/hyperliquid-python-sdk)
-- Powered by [Anthropic Claude](https://www.anthropic.com/)
-- Chart generation with [mplfinance](https://github.com/matplotlib/mplfinance)
-- Price data from [KuCoin](https://www.kucoin.com/) via CCXT
+⚠️ **For educational purposes only.** Trading cryptocurrencies involves substantial risk. Only trade with money you can afford to lose. This is not financial advice.
 
 ---
 
 <div align="center">
 
-**Made with ❤️ for Asher Shepherd Newton**
-
-*Trade smart, trade safe* 🚀
-
-*Last updated: January 2026*
+**Built for Asher Shepherd Newton** ❤️
 
 </div>
