@@ -20,22 +20,28 @@ class RSIDecision:
 
 class RSITradingEngine:
     """
-    Pure RSI-based trading engine.
+    Pure RSI-based trading engine for DOGE.
     RSI is the ONLY indicator used for entries and exits.
+    
+    DOGE Strategy:
+    - RSI < 29: BUY (oversold, enter LONG)
+    - RSI > 69: SELL (overbought, enter SHORT)
+    - RSI 29-69: NO MAN'S ZONE (no new entries allowed)
+    - Exit at middle (~50) when in profit
     """
     
     # RSI Thresholds
-    RSI_PERIOD = 7          # RSI calculation period (was 14)
+    RSI_PERIOD = 7          # RSI calculation period
     
-    # Entry zones
-    OVERBOUGHT_LOW = 68.83  # Enter SHORT when RSI is between 68.83-87
-    OVERBOUGHT_HIGH = 87.0  # Upper bound for SHORT entry
-    OVERSOLD_LOW = 29.0     # Lower bound for LONG entry
-    OVERSOLD_HIGH = 31.0    # Enter LONG when RSI is between 29-31
+    # Entry zones for DOGE
+    OVERBOUGHT_LOW = 69.0   # Enter SHORT when RSI > 69 (overbought)
+    OVERBOUGHT_HIGH = 100.0 # Upper bound for SHORT entry
+    OVERSOLD_LOW = 0.0      # Lower bound for LONG entry
+    OVERSOLD_HIGH = 29.0    # Enter LONG when RSI < 29 (oversold)
     
-    # Exit zone (sell at middle) - WIDENED to catch near-50 RSI
-    EXIT_ZONE_LOW = 45.0    # Exit zone lower bound (was 49)
-    EXIT_ZONE_HIGH = 55.0   # Exit zone upper bound (was 51)
+    # Exit zone (sell at middle) - close positions for profit
+    EXIT_ZONE_LOW = 45.0    # Exit zone lower bound
+    EXIT_ZONE_HIGH = 55.0   # Exit zone upper bound
     EXIT_ZONE = 50.0        # Center of exit zone
     
     def __init__(self):
@@ -71,15 +77,15 @@ class RSITradingEngine:
         return round(rsi, 2)
     
     def get_zone(self, rsi: float) -> str:
-        """Determine which RSI zone we're in"""
-        if self.OVERBOUGHT_LOW <= rsi <= self.OVERBOUGHT_HIGH:
-            return "overbought"  # SHORT zone (68.83-87)
-        elif self.OVERSOLD_LOW <= rsi <= self.OVERSOLD_HIGH:
-            return "oversold"    # LONG zone (29-31)
+        """Determine which RSI zone we're in for DOGE trading"""
+        if rsi > self.OVERBOUGHT_LOW:
+            return "overbought"  # SHORT zone (RSI > 69)
+        elif rsi < self.OVERSOLD_HIGH:
+            return "oversold"    # LONG zone (RSI < 29)
         elif self.EXIT_ZONE_LOW <= rsi <= self.EXIT_ZONE_HIGH:
-            return "exit"        # Exit zone (49-51)
+            return "exit"        # Exit zone (45-55, middle)
         else:
-            return "noman"       # No-man zone (no action)
+            return "noman"       # No-man zone (29-69, no entries allowed)
     
     def make_decision(
         self, 
@@ -89,18 +95,13 @@ class RSITradingEngine:
         timeframe: str = "5m"
     ) -> RSIDecision:
         """
-        Make a trading decision based ONLY on RSI.
+        Make a trading decision based ONLY on RSI for DOGE.
         
-        Rules for 5m chart (weekdays):
-        - RSI > 66.80: Enter SHORT (if no position or in LONG)
-        - RSI < 35.28: Enter LONG (if no position or in SHORT)
-        - RSI near 50.44: Close if IN PROFIT only
-        - No-Man Zone (35.28-66.80): NO new entries, only manage existing
-        
-        Rules for 1m chart (weekends) - EXIT AT OPPOSITE EXTREME:
-        - RSI > 66.80: Enter SHORT, OR close LONG (exit at opposite entry)
-        - RSI < 35.28: Enter LONG, OR close SHORT (exit at opposite entry)
-        - No middle exit zone - ride the full wave!
+        DOGE RSI Strategy:
+        - RSI < 29: BUY (enter LONG - oversold)
+        - RSI > 69: SELL (enter SHORT - overbought)
+        - RSI 29-69: NO MAN'S ZONE - NO new entries allowed!
+        - RSI 45-55: Exit zone - close positions at middle for profit
         
         Args:
             candles: OHLCV candle data
@@ -135,168 +136,112 @@ class RSITradingEngine:
             if not has_position:
                 return RSIDecision(
                     action="open_short",
-                    reason=f"RSI {rsi:.2f} in SHORT zone ({self.OVERBOUGHT_LOW}-{self.OVERBOUGHT_HIGH}) → ENTER SHORT",
+                    reason=f"🔴 RSI {rsi:.2f} > 69 (OVERBOUGHT) → SELL/SHORT DOGE",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
                     confidence=0.9
                 )
             elif current_side == "long":
-                # We're LONG and RSI hit overbought
-                if is_1m_strategy:
-                    # 1M STRATEGY: Close LONG at opposite extreme AND immediately open SHORT
-                    return RSIDecision(
-                        action="close_flip",
-                        reason=f"[1M] RSI {rsi:.2f} hit OVERBOUGHT → CLOSE LONG + OPEN SHORT immediately",
-                        rsi_value=rsi,
-                        stop_loss_pct=stop_loss,
-                        take_profit_pct=take_profit,
-                        confidence=0.9
-                    )
-                else:
-                    # 5M STRATEGY: Flip position
-                    return RSIDecision(
-                        action="close_flip",
-                        reason=f"RSI {rsi:.2f} OVERBOUGHT while LONG → CLOSE LONG and ENTER SHORT",
-                        rsi_value=rsi,
-                        stop_loss_pct=stop_loss,
-                        take_profit_pct=take_profit,
-                        confidence=0.85
-                    )
+                # We're LONG and RSI hit overbought - flip to short
+                return RSIDecision(
+                    action="close_flip",
+                    reason=f"🔴 RSI {rsi:.2f} > 69 → CLOSE LONG + OPEN SHORT (flip)",
+                    rsi_value=rsi,
+                    stop_loss_pct=stop_loss,
+                    take_profit_pct=take_profit,
+                    confidence=0.9
+                )
             else:
                 # Already short, hold
                 return RSIDecision(
                     action="hold",
-                    reason=f"RSI {rsi:.2f} OVERBOUGHT - Already SHORT, holding position",
+                    reason=f"RSI {rsi:.2f} > 69 - Already SHORT, holding",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
                     confidence=0.8
                 )
         
-        # 2. OVERSOLD ZONE - LONG signals
+        # 2. OVERSOLD ZONE - LONG signals (RSI < 29)
         elif zone == "oversold":
             if not has_position:
                 return RSIDecision(
                     action="open_long",
-                    reason=f"RSI {rsi:.2f} in LONG zone ({self.OVERSOLD_LOW}-{self.OVERSOLD_HIGH}) → ENTER LONG",
+                    reason=f"🟢 RSI {rsi:.2f} < 29 (OVERSOLD) → BUY/LONG DOGE",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
                     confidence=0.9
                 )
             elif current_side == "short":
-                # We're SHORT and RSI hit oversold
-                if is_1m_strategy:
-                    # 1M STRATEGY: Close SHORT at opposite extreme AND immediately open LONG
-                    return RSIDecision(
-                        action="close_flip",
-                        reason=f"[1M] RSI {rsi:.2f} hit OVERSOLD → CLOSE SHORT + OPEN LONG immediately",
-                        rsi_value=rsi,
-                        stop_loss_pct=stop_loss,
-                        take_profit_pct=take_profit,
-                        confidence=0.9
-                    )
-                else:
-                    # 5M STRATEGY: Flip position
-                    return RSIDecision(
-                        action="close_flip",
-                        reason=f"RSI {rsi:.2f} OVERSOLD while SHORT → CLOSE SHORT and ENTER LONG",
-                        rsi_value=rsi,
-                        stop_loss_pct=stop_loss,
-                        take_profit_pct=take_profit,
-                        confidence=0.85
-                    )
+                # We're SHORT and RSI hit oversold - flip to long
+                return RSIDecision(
+                    action="close_flip",
+                    reason=f"🟢 RSI {rsi:.2f} < 29 → CLOSE SHORT + OPEN LONG (flip)",
+                    rsi_value=rsi,
+                    stop_loss_pct=stop_loss,
+                    take_profit_pct=take_profit,
+                    confidence=0.9
+                )
             else:
                 # Already long, hold
                 return RSIDecision(
                     action="hold",
-                    reason=f"RSI {rsi:.2f} OVERSOLD - Already LONG, holding position",
+                    reason=f"RSI {rsi:.2f} < 29 - Already LONG, holding",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
                     confidence=0.8
                 )
         
-        # 3. EXIT ZONE - Close ONLY if in profit (5M strategy only)
-        # For 1M strategy, we skip middle exits and wait for opposite extreme
+        # 3. EXIT ZONE - Close positions at middle for profit
         elif zone == "exit":
-            if is_1m_strategy:
-                # 1M STRATEGY: Don't exit at middle - hold until opposite extreme
-                if has_position:
-                    return RSIDecision(
-                        action="hold",
-                        reason=f"[1M] RSI {rsi:.2f} in middle zone - HOLDING until opposite extreme ({self.OVERBOUGHT if current_side == 'long' else self.OVERSOLD})",
-                        rsi_value=rsi,
-                        stop_loss_pct=stop_loss,
-                        take_profit_pct=take_profit,
-                        confidence=0.7
-                    )
-                else:
-                    return RSIDecision(
-                        action="wait",
-                        reason=f"[1M] RSI {rsi:.2f} in middle zone - Waiting for extreme entry",
-                        rsi_value=rsi,
-                        stop_loss_pct=stop_loss,
-                        take_profit_pct=take_profit,
-                        confidence=0.5
-                    )
-            elif has_position and unrealized_pnl > 0:
+            if has_position and unrealized_pnl > 0:
                 return RSIDecision(
                     action="close_profit",
-                    reason=f"RSI {rsi:.2f} near {self.EXIT_ZONE} (EXIT ZONE) + IN PROFIT (${unrealized_pnl:+.2f}) → CLOSE POSITION",
+                    reason=f"🟡 RSI {rsi:.2f} in EXIT ZONE (45-55) + IN PROFIT (${unrealized_pnl:+.2f}) → CLOSE",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
                     confidence=0.85
                 )
             elif has_position:
-                # In exit zone but NOT in profit - HOLD, let it run
+                # In exit zone but NOT in profit - HOLD, let it recover
                 return RSIDecision(
                     action="hold",
-                    reason=f"RSI {rsi:.2f} in EXIT ZONE but NOT in profit (${unrealized_pnl:+.2f}) → HOLDING (let it recover)",
+                    reason=f"RSI {rsi:.2f} in EXIT ZONE but NOT in profit (${unrealized_pnl:+.2f}) → holding",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
                     confidence=0.7
                 )
             else:
-                # No position, just wait
+                # No position, can't enter - this is no man's zone territory
                 return RSIDecision(
                     action="wait",
-                    reason=f"RSI {rsi:.2f} in EXIT ZONE - No position, waiting for extreme",
+                    reason=f"⚪ RSI {rsi:.2f} in NO MAN'S ZONE (29-69) → NO ENTRY ALLOWED",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
                     confidence=0.5
                 )
         
-        # 4. NO-MAN ZONE - NO new entries, only hold or let stops/TPs work
+        # 4. NO-MAN ZONE - NO new entries allowed! Only manage existing positions
         else:  # zone == "noman"
             if has_position:
-                if is_1m_strategy:
-                    target = self.OVERBOUGHT if current_side == "long" else self.OVERSOLD
-                    return RSIDecision(
-                        action="hold",
-                        reason=f"[1M] RSI {rsi:.2f} in middle zone → HOLDING until RSI hits {target:.2f}",
-                        rsi_value=rsi,
-                        stop_loss_pct=stop_loss,
-                        take_profit_pct=take_profit,
-                        confidence=0.7
-                    )
-                else:
-                    return RSIDecision(
-                        action="hold",
-                        reason=f"RSI {rsi:.2f} in NO-MAN ZONE → HOLDING position (let SL/TP work)",
-                        rsi_value=rsi,
-                        stop_loss_pct=stop_loss,
-                        take_profit_pct=take_profit,
-                        confidence=0.6
-                    )
+                return RSIDecision(
+                    action="hold",
+                    reason=f"⚪ RSI {rsi:.2f} in NO MAN'S ZONE (29-69) → holding position, waiting for exit zone",
+                    rsi_value=rsi,
+                    stop_loss_pct=stop_loss,
+                    take_profit_pct=take_profit,
+                    confidence=0.6
+                )
             else:
                 return RSIDecision(
                     action="wait",
-                    reason=f"RSI {rsi:.2f} in NO-MAN ZONE → NO ENTRY ALLOWED, waiting for extreme",
+                    reason=f"⚪ RSI {rsi:.2f} in NO MAN'S ZONE (29-69) → NO ENTRY ALLOWED",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,

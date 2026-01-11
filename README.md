@@ -1,10 +1,10 @@
-# TradingETH
+# TradingDOGE
 
 <div align="center">
 
-![ETH Trading Bot](https://img.shields.io/badge/ETH-Trading%20Bot-627EEA?style=for-the-badge&logo=ethereum&logoColor=white)
+![DOGE Trading Bot](https://img.shields.io/badge/DOGE-Trading%20Bot-C3A634?style=for-the-badge&logo=dogecoin&logoColor=white)
 
-**Automated ETH/USDC perpetual trading on Hyperliquid**
+**Automated DOGE/USDC perpetual trading on Hyperliquid**
 
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Hyperliquid](https://img.shields.io/badge/Hyperliquid-DEX-8B5CF6?style=flat-square)](https://hyperliquid.xyz)
@@ -17,7 +17,7 @@
 
 ## Overview
 
-TradingETH is an automated trading bot that combines RSI-based technical analysis with AI-powered market insights. It trades ETH perpetuals on Hyperliquid with 10x leverage, operating 24/7 with built-in risk management.
+TradingDOGE is an automated trading bot that combines RSI-based technical analysis with AI-powered market insights. It trades DOGE perpetuals on Hyperliquid with 15x leverage, operating 24/7 with built-in risk management.
 
 ## Strategy
 
@@ -25,19 +25,27 @@ TradingETH is an automated trading bot that combines RSI-based technical analysi
 
 | Zone | RSI Range | Action |
 |:-----|:----------|:-------|
-| 🔴 Short | 68.83 – 87 | Enter SHORT |
-| 🟢 Long | 29 – 31 | Enter LONG |
-| 🟡 Exit | 49 – 51 | Close position |
-| ⚪ Neutral | Outside zones | Hold / Wait |
+| 🔴 Short | > 69 | Enter SHORT (overbought) |
+| 🟢 Long | < 29 | Enter LONG (oversold) |
+| 🟡 Exit | 45 – 55 | Close position (middle) |
+| ⚪ No Man's Zone | 29 – 69 | NO entries allowed |
 
-The bot monitors 5-minute candles and executes trades when RSI enters the defined zones. Positions are closed at the middle zone (49-51) when in profit.
+The bot monitors 5-minute candles and executes trades when RSI hits the extreme zones. **No entries are allowed in the "No Man's Zone" (29-69).** Positions are closed at the middle zone (~50) when in profit.
+
+### Fee Structure (Hyperliquid)
+
+| Order Type | Fee |
+|:-----------|:----|
+| Limit (maker) | 0.01–0.02% |
+| Market (taker) | 0.04–0.06% |
+| Slippage (mid-cap) | 0.08–0.15% |
 
 ### Risk Management
 
-- **Leverage:** 10x
+- **Leverage:** 15x
 - **Position Size:** 95% of available margin
 - **Stop Loss:** Dynamic, based on market structure
-- **Take Profit:** 1.5x – 3x risk/reward ratio
+- **Take Profit:** Exit at RSI ~50 (middle zone)
 
 ## Quick Start
 
@@ -89,7 +97,7 @@ PAPER_MODE=true python start.py
 | `/winrate` | Trading statistics |
 | `/rsi` | Current RSI value |
 | `/analysis` | AI market analysis |
-| `/price` | Current ETH price |
+| `/price` | Current DOGE price |
 | `/closetrade` | Close current position |
 | `/status` | Bot status |
 | `/help` | All commands |
