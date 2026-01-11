@@ -8,6 +8,23 @@ from hyperliquid.utils import constants
 
 
 class HyperliquidClient:
+    """
+    Hyperliquid Exchange Client
+    
+    Fee Structure (as of 2025):
+    - Limit (maker): 0.01-0.02%
+    - Market (taker): 0.04-0.06% (~0.035% fee + ~0-0.02% slippage on liquid books)
+    
+    Slippage Estimates:
+    - Liquid perps (ETH/BTC): 0.035% taker fee + minimal slippage
+    - Mid-cap/volatile perps: 0.08-0.15% total (fee + slippage)
+    """
+    
+    # Fee constants for tracking/estimation
+    MAKER_FEE_PCT = 0.015 / 100   # 0.015% average maker fee (limit orders)
+    TAKER_FEE_PCT = 0.05 / 100    # 0.05% average taker fee (market orders)
+    MARKET_SLIPPAGE_PCT = 0.10 / 100  # 0.10% average slippage on market orders
+    
     def __init__(
         self,
         private_key_hex: str,
@@ -148,8 +165,13 @@ class HyperliquidClient:
             else:
                 limit_price = price * (1 + offset_pct)
             
-            print(f"💰 FEE SAVER: Trying limit order first (0.01% fee vs 0.035% market)")
-            print(f"   Current price: ${price:.2f} → Limit: ${limit_price:.2f}")
+            # Estimate fees saved by using limit vs market
+            limit_fee = size * price * self.MAKER_FEE_PCT
+            market_fee = size * price * (self.TAKER_FEE_PCT + self.MARKET_SLIPPAGE_PCT)
+            savings = market_fee - limit_fee
+            
+            print(f"💰 FEE SAVER: Trying limit order (maker: ~${limit_fee:.2f}) vs market (~${market_fee:.2f})")
+            print(f"   Potential savings: ~${savings:.2f} | Current: ${price:.2f} → Limit: ${limit_price:.2f}")
             
             limit_result = self.place_limit_order(symbol, is_buy, size, limit_price)
             
@@ -198,6 +220,10 @@ class HyperliquidClient:
         
         # === MARKET ORDER FALLBACK ===
         slippage = max_slippage_pct / 100
+        
+        # Estimate fee cost for logging
+        est_fee = size * (price or 0) * (self.TAKER_FEE_PCT + self.MARKET_SLIPPAGE_PCT)
+        print(f"💸 Est. market order cost: ~${est_fee:.2f} ({(self.TAKER_FEE_PCT + self.MARKET_SLIPPAGE_PCT)*100:.3f}% fee+slippage)")
         
         for attempt in range(1, max_retries + 1):
             current_slippage = slippage + (0.001 * (attempt - 1))
