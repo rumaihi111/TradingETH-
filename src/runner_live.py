@@ -117,7 +117,7 @@ async def run_live_async():
                 last_timeframe = current_timeframe
             
             # Fetch candles using dynamic timeframe
-            ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe=current_timeframe, limit=50)
+            ohlcv = spot.fetch_ohlcv("DOGE/USDT", timeframe=current_timeframe, limit=50)
             candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
             price = candles[-1]["close"]
             
@@ -158,7 +158,7 @@ async def run_live_async():
         # Log position status
         if current_pos and abs(current_pos.get("size", 0)) > 0.0001:
             side_display = "LONG" if current_pos.get("size", 0) > 0 else "SHORT"
-            print(f"📍 Position: {side_display} {abs(current_pos.get('size', 0)):.4f} ETH @ ${current_pos.get('entry', 0):.2f}")
+            print(f"📍 Position: {side_display} {abs(current_pos.get('size', 0)):.4f} DOGE @ ${current_pos.get('entry', 0):.4f}")
             print(f"💰 Unrealized P&L: ${unrealized_pnl:+.2f}")
         
         # Check for liquidation in paper mode
@@ -217,7 +217,7 @@ async def run_live_async():
         if rsi_decision.action == "close_profit":
             if current_pos:
                 print(f"💰 CLOSING FOR PROFIT - RSI at exit zone + profit")
-                ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe=current_timeframe, limit=1)
+                ohlcv_close = spot.fetch_ohlcv("DOGE/USDT", timeframe=current_timeframe, limit=1)
                 close_price = ohlcv_close[0][4]
                 
                 # Use limit order first to save fees (both paper and live)
@@ -247,7 +247,7 @@ async def run_live_async():
         if rsi_decision.action == "close_flip":
             if current_pos:
                 print(f"🔄 FLIPPING POSITION - RSI moved to opposite extreme")
-                ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe=current_timeframe, limit=1)
+                ohlcv_close = spot.fetch_ohlcv("DOGE/USDT", timeframe=current_timeframe, limit=1)
                 close_price = ohlcv_close[0][4]
                 
                 # Use limit order first to save fees (both paper and live)
@@ -300,7 +300,7 @@ async def run_live_async():
             print(f"📊 Position Value (10x): ${notional_value:.2f}")
             
             print(f"📈 OPENING {new_side.upper()} - RSI: {rsi_decision.rsi_value:.2f}")
-            print(f"💰 Size: {size:.4f} ETH @ {leverage}x leverage")
+            print(f"💰 Size: {size:.4f} DOGE @ {leverage}x leverage")
             
             if use_paper:
                 result = ex.place_market(settings.trading_pair, new_side, size, 0.5, price=price)
@@ -314,7 +314,7 @@ async def run_live_async():
                 verification = ex.positions()
                 if verification and abs(verification[0].get('size', 0)) >= size * 0.9:
                     verified_pos = verification[0]
-                    print(f"✅ Position verified: {new_side.upper()} {abs(verified_pos.get('size', 0)):.4f} ETH @ ${verified_pos.get('entry', price):.2f}")
+                    print(f"✅ Position verified: {new_side.upper()} {abs(verified_pos.get('size', 0)):.4f} DOGE @ ${verified_pos.get('entry', price):.4f}")
                     position_found = True
                     break
             

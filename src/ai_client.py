@@ -75,15 +75,15 @@ class AISignalClient:
                 datetime_format='%H:%M',
             )
             
-            ax1.set_title('ETH/USDC 5-Minute Chart with RSI', fontsize=14, fontweight='bold')
+            ax1.set_title('DOGE/USDC 5-Minute Chart with RSI', fontsize=14, fontweight='bold')
             ax1.grid(True, alpha=0.3)
             
             # Plot RSI
-            ax3.plot(df.index, rsi_values, color='purple', linewidth=2, label='RSI(14)')
-            ax3.axhline(y=66.80, color='red', linestyle='--', linewidth=1.5, label='Overbought (66.80)', alpha=0.7)
-            ax3.axhline(y=35.28, color='green', linestyle='--', linewidth=1.5, label='Oversold (35.28)', alpha=0.7)
-            ax3.axhline(y=50.44, color='orange', linestyle='--', linewidth=1.5, label='Exit Zone (50.44)', alpha=0.7)
-            ax3.fill_between(df.index, 35.28, 66.80, alpha=0.1, color='gray', label='No-Man Zone')
+            ax3.plot(df.index, rsi_values, color='purple', linewidth=2, label='RSI(7)')
+            ax3.axhline(y=69, color='red', linestyle='--', linewidth=1.5, label='Overbought (69)', alpha=0.7)
+            ax3.axhline(y=29, color='green', linestyle='--', linewidth=1.5, label='Oversold (29)', alpha=0.7)
+            ax3.axhline(y=50, color='orange', linestyle='--', linewidth=1.5, label='Exit Zone (50)', alpha=0.7)
+            ax3.fill_between(df.index, 29, 69, alpha=0.1, color='gray', label='No-Man Zone')
             ax3.set_ylim(0, 100)
             ax3.set_ylabel('RSI', fontsize=10)
             ax3.set_xlabel('Time', fontsize=10)
@@ -91,7 +91,7 @@ class AISignalClient:
             ax3.grid(True, alpha=0.3)
             
             # Add current RSI value as text
-            current_rsi_color = 'red' if rsi_value > 66.80 else 'green' if rsi_value < 35.28 else 'orange' if abs(rsi_value - 50.44) < 2 else 'gray'
+            current_rsi_color = 'red' if rsi_value > 69 else 'green' if rsi_value < 29 else 'orange' if 45 <= rsi_value <= 55 else 'gray'
             ax3.text(0.02, 0.95, f'Current RSI: {rsi_value:.2f}', 
                     transform=ax3.transAxes, fontsize=12, fontweight='bold',
                     verticalalignment='top', color=current_rsi_color,
@@ -164,16 +164,16 @@ TRADING RULES:
 - Max open trades at once is 1.
 - Compound the money.
 - Trade max 2 times per hour with a 30 minute interval break per trade.
-- Analyze 5-minute ETH/USDC charts using visual pattern recognition.
+- Analyze 5-minute DOGE/USDC charts using visual pattern recognition.
 - Look for chart patterns: triangles, flags, head & shoulders, double tops/bottoms, wedges.
 - Identify key support/resistance levels visually.
 - Use candlestick patterns: engulfing, doji, hammers, shooting stars.
 
-RSI STRATEGY (STRICT RULES):
-- RSI > 66.80: ENTER SHORT (overbought)
-- RSI < 35.28: ENTER LONG (oversold)
-- RSI between 66.80-35.28: NO-MAN ZONE (no new entries, only exits allowed)
-- RSI near 50.44: EXIT ZONE (close position if in profit)
+RSI STRATEGY (STRICT RULES FOR DOGE):
+- RSI < 29: ENTER LONG (oversold) - BUY
+- RSI > 69: ENTER SHORT (overbought) - SELL
+- RSI 29-69: NO-MAN ZONE (no new entries allowed!)
+- RSI 45-55: EXIT ZONE (close position if in profit)
 
 SECOND BRAIN INTEGRATION:
 You have a second analytical brain that provides deep price action insights. Use its analysis to:
@@ -225,7 +225,7 @@ CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown.""
             })
             
             # Text prompt for visual analysis
-            text_prompt = f"""Analyze this 5-minute ETH/USDC chart image and make a trading decision.
+            text_prompt = f"""Analyze this 5-minute DOGE/USDC chart image and make a trading decision.
 
 📊 VISUAL ANALYSIS:
 - Identify chart patterns (triangles, flags, head & shoulders, etc.)
@@ -236,7 +236,7 @@ CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown.""
 
 📈 RSI ANALYSIS:
 Current RSI: {rsi_value:.2f}
-{"🔴 OVERBOUGHT - Enter SHORT" if rsi_value > 66.80 else "🟢 OVERSOLD - Enter LONG" if rsi_value < 35.28 else "🟠 EXIT ZONE - Close if in profit" if abs(rsi_value - 50.44) < 2.0 else "⚠️ NO-MAN ZONE - No new entries"}
+{"🔴 OVERBOUGHT (>69) - Enter SHORT" if rsi_value > 69 else "🟢 OVERSOLD (<29) - Enter LONG" if rsi_value < 29 else "🟠 EXIT ZONE (45-55) - Close if in profit" if 45 <= rsi_value <= 55 else "⚪ NO-MAN ZONE (29-69) - No new entries allowed"}
 
 🧠 SECOND BRAIN ANALYSIS:
 Bias: {second_brain_signal.bias.upper()} (Confidence: {second_brain_signal.confidence:.1%})
@@ -259,13 +259,13 @@ Based on:
 Return your trading decision as JSON:"""
         else:
             # Fallback to text-based analysis if image fails
-            text_prompt = f"""Analyze the following 5-minute chart data for ETH/USDC and make a trading decision.
+            text_prompt = f"""Analyze the following 5-minute chart data for DOGE/USDC and make a trading decision.
 
 📊 5-MINUTE CANDLES (Most recent last):
 {self._format_candles(candles)}
 
 📈 RSI: {rsi_value:.2f}
-{"🔴 OVERBOUGHT - Enter SHORT" if rsi_value > 66.80 else "🟢 OVERSOLD - Enter LONG" if rsi_value < 35.28 else "🟠 EXIT ZONE" if abs(rsi_value - 50.44) < 2.0 else "⚠️ NO-MAN ZONE"}
+{"🔴 OVERBOUGHT (>69) - Enter SHORT" if rsi_value > 69 else "🟢 OVERSOLD (<29) - Enter LONG" if rsi_value < 29 else "🟠 EXIT ZONE (45-55)" if 45 <= rsi_value <= 55 else "⚪ NO-MAN ZONE (29-69) - No entries"}
 
 🧠 SECOND BRAIN: {second_brain_signal.bias.upper()} (SL: {second_brain_signal.stop_loss_distance_pct:.2%}, TP: {second_brain_signal.take_profit_distance_pct:.2%})
 

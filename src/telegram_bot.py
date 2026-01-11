@@ -57,7 +57,7 @@ class TradingTelegramBot:
             ("help", "Show all available commands"),
             ("balance", "Show wallet balance and positions"),
             ("rsi", "Show current RSI value and zone"),
-            ("price", "Show current ETH price"),
+            ("price", "Show current DOGE price"),
             ("analysis", "Full market analysis"),
             ("data", "Performance stats by timeframe (daily/weekly/monthly/yearly)"),
             ("winrate", "Show trading statistics and win rate"),
@@ -86,11 +86,11 @@ class TradingTelegramBot:
     # Command Handlers
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show all available commands"""
-        message = """🤖 **ETH Trading Bot Commands**
+        message = """🤖 **DOGE Trading Bot Commands**
 
 📊 **Market Info:**
 /rsi - Current RSI value and zone
-/price - Current ETH price
+/price - Current DOGE price
 /analysis - Full market analysis
 
 💰 **Account:**
@@ -105,16 +105,16 @@ class TradingTelegramBot:
 /withdraw <amount> <address> - Withdraw USDC
 /closetrade - Manually close position
 
-📈 **RSI Strategy Thresholds:**
-• SHORT Entry: RSI > 66.80
-• LONG Entry: RSI < 35.28
-• Exit Zone: RSI ~50.44
-• No-Man Zone: 35.28 - 66.80
+📈 **RSI Strategy Thresholds (DOGE):**
+• SHORT Entry: RSI > 69
+• LONG Entry: RSI < 29
+• Exit Zone: RSI 45-55
+• No-Man Zone: 29 - 69 (no entries!)
 
 ⚙️ **Settings:**
 • Leverage: 15x
 • Position Size: 95% margin
-• Asset: ETH/USDC"""
+• Asset: DOGE/USDC"""
         
         await update.message.reply_text(message, parse_mode='Markdown')
 
@@ -122,7 +122,7 @@ class TradingTelegramBot:
         """Show current RSI value and trading zone"""
         try:
             # Get candles for RSI calculation
-            candles = self.hyperliquid.candles(symbol="ETH", interval="5m", limit=50)
+            candles = self.hyperliquid.candles(symbol="DOGE", interval="5m", limit=50)
             
             if not candles or len(candles) < 20:
                 await update.message.reply_text("❌ Not enough data for RSI calculation")
@@ -163,20 +163,20 @@ class TradingTelegramBot:
             else:
                 pos_info = "\n\n📊 **Position:** None"
             
-            message = f"""📈 **RSI Analysis**
+            message = f"""📈 **RSI Analysis (DOGE)**
 
-**RSI(14):** {current_rsi:.2f}
+**RSI(7):** {current_rsi:.2f}
 **Zone:** {zone}
 **Status:** {zone_desc}
 **Suggested:** {action}
 
-**ETH Price:** ${current_price:.2f}
+**DOGE Price:** ${current_price:.4f}
 
 📊 **Thresholds:**
-• Overbought (SHORT): > 66.80
-• Oversold (LONG): < 35.28  
-• Exit Zone: ~50.44
-• No-Man: 35.28 - 66.80{pos_info}
+• Overbought (SHORT): > 69
+• Oversold (LONG): < 29  
+• Exit Zone: 45-55
+• No-Man Zone: 29-69 (no entries!){pos_info}
 
 🕐 {datetime.utcnow().strftime('%H:%M:%S UTC')}"""
             
@@ -185,9 +185,9 @@ class TradingTelegramBot:
             await update.message.reply_text(f"❌ Error: {e}")
 
     async def cmd_price(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Show current ETH price"""
+        """Show current DOGE price"""
         try:
-            candles = self.hyperliquid.candles(symbol="ETH", interval="5m", limit=10)
+            candles = self.hyperliquid.candles(symbol="DOGE", interval="5m", limit=10)
             
             if candles:
                 current = candles[-1]
@@ -200,12 +200,12 @@ class TradingTelegramBot:
                 change_pct = (change / open_price) * 100 if open_price > 0 else 0
                 emoji = "📈" if change >= 0 else "📉"
                 
-                message = f"""{emoji} **ETH Price**
+                message = f"""{emoji} **DOGE Price**
 
-**Current:** ${price:.2f}
-**Change:** ${change:+.2f} ({change_pct:+.2f}%)
-**High:** ${high:.2f}
-**Low:** ${low:.2f}
+**Current:** ${price:.4f}
+**Change:** ${change:+.4f} ({change_pct:+.2f}%)
+**High:** ${high:.4f}
+**Low:** ${low:.4f}
 
 🕐 {datetime.utcnow().strftime('%H:%M:%S UTC')}"""
                 
@@ -218,7 +218,7 @@ class TradingTelegramBot:
     async def cmd_analysis(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Full market analysis"""
         try:
-            candles = self.hyperliquid.candles(symbol="ETH", interval="5m", limit=50)
+            candles = self.hyperliquid.candles(symbol="DOGE", interval="5m", limit=50)
             
             if not candles or len(candles) < 20:
                 await update.message.reply_text("❌ Not enough data for analysis")
@@ -469,7 +469,7 @@ class TradingTelegramBot:
             # Close the position
             close_side = "sell" if size > 0 else "buy"
             result = self.hyperliquid.market_order(
-                symbol="ETH",
+                symbol="DOGE",
                 side=close_side,
                 size=abs(size),
                 reduce_only=True
@@ -482,9 +482,9 @@ class TradingTelegramBot:
                 message = f"""✅ **POSITION CLOSED**
 
 • Direction: {side}
-• Size: {abs(size):.4f} ETH
-• Entry: ${entry:.2f}
-• Exit: ${fill_price:.2f}
+• Size: {abs(size):.4f} DOGE
+• Entry: ${entry:.4f}
+• Exit: ${fill_price:.4f}
 • P&L: ${unrealized:+.2f}
 
 ⚠️ Position closed manually via Telegram
@@ -517,8 +517,8 @@ class TradingTelegramBot:
                 total_value = equity + unrealized
                 
                 message += f"\n**Open Position:**\n"
-                message += f"• {side} {size:.4f} ETH\n"
-                message += f"• Entry: ${entry:.2f}\n"
+                message += f"• {side} {size:.4f} DOGE\n"
+                message += f"• Entry: ${entry:.4f}\n"
                 message += f"• Unrealized P&L: ${unrealized:+.2f}\n"
                 message += f"\n**Total Account Value:** ${total_value:.2f}"
             else:
@@ -607,8 +607,8 @@ class TradingTelegramBot:
                 pos = positions[0]
                 side = "LONG 📈" if pos['size'] > 0 else "SHORT 📉"
                 status += f"\n{side}\n"
-                status += f"Size: {abs(pos['size']):.4f} ETH\n"
-                status += f"Entry: ${pos['entry']:.2f}\n"
+                status += f"Size: {abs(pos['size']):.4f} DOGE\n"
+                status += f"Entry: ${pos['entry']:.4f}\n"
                 status += f"Unrealized P&L: ${pos['unrealized']:.2f}"
             else:
                 status += "\n⚪ Position: FLAT (No position)"
@@ -666,8 +666,8 @@ class TradingTelegramBot:
         
         message = f"{emoji} **TRADE OPENED** {emoji}\n\n"
         message += f"**Direction:** {side.upper()}\n"
-        message += f"**Entry Price:** ${price:.2f}\n"
-        message += f"**Size:** {size:.4f} ETH\n"
+        message += f"**Entry Price:** ${price:.4f}\n"
+        message += f"**Size:** {size:.4f} DOGE\n"
         message += f"**Leverage:** {leverage}x\n"
         message += f"**Position Value:** ${notional_value:.2f}\n"
         message += f"**Margin Used:** ${margin_used:.2f}\n\n"
@@ -746,9 +746,9 @@ class TradingTelegramBot:
         
         message = f"{emoji} **TRADE CLOSED** {pnl_emoji}\n\n"
         message += f"Direction: {side.upper()}\n"
-        message += f"Size: {abs(size):.4f} ETH\n"
-        message += f"Entry: ${entry:.2f}\n"
-        message += f"Exit: ${exit_price:.2f}\n"
+        message += f"Size: {abs(size):.4f} DOGE\n"
+        message += f"Entry: ${entry:.4f}\n"
+        message += f"Exit: ${exit_price:.4f}\n"
         message += f"Price Change: ${exit_price - entry:+.2f} ({(exit_price/entry - 1)*100:+.2f}%)\n"
         message += f"Margin Used: ${margin_used:.2f}\n\n"
         message += f"**P&L: ${pnl:+.2f} ({pnl_pct:+.2f}% on margin)**\n\n"
@@ -846,17 +846,17 @@ class TradingTelegramBot:
         
         message = f"{emoji} **TRADE OPENED** {emoji}\n\n"
         message += f"**Direction:** {side.upper()}\n"
-        message += f"**Entry Price:** ${price:.2f}\n"
-        message += f"**Size:** {size:.4f} ETH\n"
+        message += f"**Entry Price:** ${price:.4f}\n"
+        message += f"**Size:** {size:.4f} DOGE\n"
         message += f"**Leverage:** {leverage}x\n"
         message += f"**Position Value:** ${notional_value:.2f}\n"
         message += f"**Margin Used:** ${margin_used:.2f}\n\n"
         
         message += f"{rsi_emoji} **RSI Trigger:** {rsi_value:.2f}\n"
         if side.lower() == "long":
-            message += f"   (Entered OVERSOLD zone < 35.28)\n\n"
+            message += f"   (Entered OVERSOLD zone < 29)\n\n"
         else:
-            message += f"   (Entered OVERBOUGHT zone > 66.80)\n\n"
+            message += f"   (Entered OVERBOUGHT zone > 69)\n\n"
         
         # Add Stop Loss and Take Profit if provided
         if stop_loss:
@@ -907,20 +907,20 @@ class TradingTelegramBot:
         }
         
         message = f"📊 **MARKET ANALYSIS** 📊\n\n"
-        message += f"**ETH Price:** ${price:.2f}\n"
-        message += f"**RSI(14):** {rsi:.2f}\n"
+        message += f"**DOGE Price:** ${price:.4f}\n"
+        message += f"**RSI(7):** {rsi:.2f}\n"
         message += f"**Trend:** {trend_emoji.get(trend.lower(), '⚪')} {trend.upper()}\n"
         message += f"**Volatility:** {vol_emoji.get(volatility.lower(), '📊')} {volatility.upper()}\n\n"
         
         # RSI interpretation
-        if rsi > 66.80:
-            message += f"⚠️ RSI OVERBOUGHT - Short opportunity\n"
-        elif rsi < 35.28:
-            message += f"⚠️ RSI OVERSOLD - Long opportunity\n"
-        elif 48 < rsi < 53:
-            message += f"🟡 RSI at exit zone - Take profits if in position\n"
+        if rsi > 69:
+            message += f"⚠️ RSI OVERBOUGHT (>69) - Short opportunity\n"
+        elif rsi < 29:
+            message += f"⚠️ RSI OVERSOLD (<29) - Long opportunity\n"
+        elif 45 < rsi < 55:
+            message += f"🟡 RSI at exit zone (45-55) - Take profits if in position\n"
         else:
-            message += f"⏳ RSI in no-man zone - Wait for signal\n"
+            message += f"⏳ RSI in no-man zone (29-69) - No entries allowed\n"
         
         message += f"\n🕐 Time: {datetime.utcnow().strftime('%H:%M:%S UTC')}"
         
