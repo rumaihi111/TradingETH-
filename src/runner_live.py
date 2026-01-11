@@ -27,32 +27,15 @@ EST = ZoneInfo("America/New_York")
 
 def get_trading_timeframe() -> tuple[str, int]:
     """
-    Determine the trading timeframe based on EST time.
+    Returns the trading timeframe.
     
-    Schedule:
-    - Monday 12:00AM EST to Friday 5:59PM EST: 5-minute chart
-    - Friday 6:00PM EST to Sunday 11:59PM EST: 1-minute chart
+    Always uses 5-minute chart with standard RSI strategy.
     
     Returns:
         tuple: (timeframe string for ccxt, sleep interval in seconds)
     """
-    now_est = datetime.now(EST)
-    weekday = now_est.weekday()  # 0=Monday, 4=Friday, 5=Saturday, 6=Sunday
-    hour = now_est.hour
-    
-    # Weekend trading window: Friday 6PM EST to Sunday 11:59PM EST
-    is_weekend_window = (
-        (weekday == 4 and hour >= 18) or  # Friday 6PM+ EST
-        weekday == 5 or                    # Saturday (all day)
-        weekday == 6                       # Sunday (all day until midnight)
-    )
-    
-    if is_weekend_window:
-        # 1-minute chart for weekend trading
-        return "1m", 30  # Check every 30 seconds for 1m chart
-    else:
-        # 5-minute chart for weekday trading
-        return "5m", 60  # Check every 60 seconds for 5m chart
+    # Always use 5-minute chart
+    return "5m", 60  # Check every 60 seconds for 5m chart
 
 
 def get_timeframe_display() -> str:
