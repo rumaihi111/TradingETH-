@@ -33,9 +33,9 @@ class RSITradingEngine:
     OVERSOLD_LOW = 29.0     # Lower bound for LONG entry
     OVERSOLD_HIGH = 31.0    # Enter LONG when RSI is between 29-31
     
-    # Exit zone (sell at middle)
-    EXIT_ZONE_LOW = 49.0    # Exit zone lower bound
-    EXIT_ZONE_HIGH = 51.0   # Exit zone upper bound
+    # Exit zone (sell at middle) - WIDENED to catch near-50 RSI
+    EXIT_ZONE_LOW = 45.0    # Exit zone lower bound (was 49)
+    EXIT_ZONE_HIGH = 55.0   # Exit zone upper bound (was 51)
     EXIT_ZONE = 50.0        # Center of exit zone
     
     def __init__(self):
