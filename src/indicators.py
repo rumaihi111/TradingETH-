@@ -7,13 +7,13 @@ from typing import List, Dict, Any
 import pandas as pd
 
 
-def calculate_rsi(candles: List[Dict[str, Any]], period: int = 14) -> float:
+def calculate_rsi(candles: List[Dict[str, Any]], period: int = 7) -> float:
     """
     Calculate RSI (Relative Strength Index) for given candles.
     
     Args:
         candles: List of OHLCV dictionaries with 'close' prices
-        period: RSI period (default 14)
+        period: RSI period (default 7)
         
     Returns:
         Current RSI value (0-100)

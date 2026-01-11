@@ -24,18 +24,28 @@ class RSITradingEngine:
     RSI is the ONLY indicator used for entries and exits.
     """
     
-    # RSI Thresholds (1-min chart)
-    OVERBOUGHT = 66.80      # Enter SHORT when RSI goes above this
-    OVERSOLD = 32.70        # Enter LONG when RSI goes below this
-    EXIT_ZONE = 50.44       # Close position if in profit and RSI near this
-    EXIT_ZONE_RANGE = 3.0   # +/- range around EXIT_ZONE
+    # RSI Thresholds
+    RSI_PERIOD = 7          # RSI calculation period (was 14)
+    
+    # Entry zones
+    OVERBOUGHT_LOW = 68.83  # Enter SHORT when RSI is between 68.83-87
+    OVERBOUGHT_HIGH = 87.0  # Upper bound for SHORT entry
+    OVERSOLD_LOW = 29.0     # Lower bound for LONG entry
+    OVERSOLD_HIGH = 31.0    # Enter LONG when RSI is between 29-31
+    
+    # Exit zone (sell at middle)
+    EXIT_ZONE_LOW = 49.0    # Exit zone lower bound
+    EXIT_ZONE_HIGH = 51.0   # Exit zone upper bound
+    EXIT_ZONE = 50.0        # Center of exit zone
     
     def __init__(self):
         self.last_rsi = None
         self.entry_rsi = None  # RSI when we entered the trade
     
-    def calculate_rsi(self, candles: List[Dict[str, Any]], period: int = 14) -> float:
+    def calculate_rsi(self, candles: List[Dict[str, Any]], period: int = None) -> float:
         """Calculate RSI from candle data"""
+        if period is None:
+            period = self.RSI_PERIOD  # Default to class RSI period (7)
         if len(candles) < period + 1:
             return 50.0  # Neutral if not enough data
         
@@ -62,12 +72,12 @@ class RSITradingEngine:
     
     def get_zone(self, rsi: float) -> str:
         """Determine which RSI zone we're in"""
-        if rsi > self.OVERBOUGHT:
-            return "overbought"  # SHORT zone
-        elif rsi < self.OVERSOLD:
-            return "oversold"    # LONG zone
-        elif abs(rsi - self.EXIT_ZONE) <= self.EXIT_ZONE_RANGE:
-            return "exit"        # Exit zone (close if in profit)
+        if self.OVERBOUGHT_LOW <= rsi <= self.OVERBOUGHT_HIGH:
+            return "overbought"  # SHORT zone (68.83-87)
+        elif self.OVERSOLD_LOW <= rsi <= self.OVERSOLD_HIGH:
+            return "oversold"    # LONG zone (29-31)
+        elif self.EXIT_ZONE_LOW <= rsi <= self.EXIT_ZONE_HIGH:
+            return "exit"        # Exit zone (49-51)
         else:
             return "noman"       # No-man zone (no action)
     
@@ -101,7 +111,7 @@ class RSITradingEngine:
         Returns:
             RSIDecision with action and reasoning
         """
-        rsi = self.calculate_rsi(candles, period=14)
+        rsi = self.calculate_rsi(candles)  # Uses RSI_PERIOD (7)
         zone = self.get_zone(rsi)
         
         # Check if we're using 1-minute chart strategy (exit at extremes)
@@ -125,7 +135,7 @@ class RSITradingEngine:
             if not has_position:
                 return RSIDecision(
                     action="open_short",
-                    reason=f"RSI {rsi:.2f} > {self.OVERBOUGHT} (OVERBOUGHT) → ENTER SHORT",
+                    reason=f"RSI {rsi:.2f} in SHORT zone ({self.OVERBOUGHT_LOW}-{self.OVERBOUGHT_HIGH}) → ENTER SHORT",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
@@ -169,7 +179,7 @@ class RSITradingEngine:
             if not has_position:
                 return RSIDecision(
                     action="open_long",
-                    reason=f"RSI {rsi:.2f} < {self.OVERSOLD} (OVERSOLD) → ENTER LONG",
+                    reason=f"RSI {rsi:.2f} in LONG zone ({self.OVERSOLD_LOW}-{self.OVERSOLD_HIGH}) → ENTER LONG",
                     rsi_value=rsi,
                     stop_loss_pct=stop_loss,
                     take_profit_pct=take_profit,
@@ -277,7 +287,7 @@ class RSITradingEngine:
                 else:
                     return RSIDecision(
                         action="hold",
-                        reason=f"RSI {rsi:.2f} in NO-MAN ZONE ({self.OVERSOLD}-{self.OVERBOUGHT}) → HOLDING position (let SL/TP work)",
+                        reason=f"RSI {rsi:.2f} in NO-MAN ZONE → HOLDING position (let SL/TP work)",
                         rsi_value=rsi,
                         stop_loss_pct=stop_loss,
                         take_profit_pct=take_profit,
@@ -320,7 +330,7 @@ class RSITradingEngine:
         messages.append(f"📊 RSI: {rsi:.2f}")
         
         if zone == "overbought":
-            messages.append(f"🔴 OVERBOUGHT (>{self.OVERBOUGHT})")
+            messages.append(f"🔴 SHORT ZONE ({self.OVERBOUGHT_LOW}-{self.OVERBOUGHT_HIGH})")
             if position_side == "short":
                 messages.append("✅ Good - Aligned with SHORT")
             elif position_side == "long":
@@ -329,7 +339,7 @@ class RSITradingEngine:
                 messages.append("💡 Signal: ENTER SHORT")
                 
         elif zone == "oversold":
-            messages.append(f"🟢 OVERSOLD (<{self.OVERSOLD})")
+            messages.append(f"🟢 LONG ZONE ({self.OVERSOLD_LOW}-{self.OVERSOLD_HIGH})")
             if position_side == "long":
                 messages.append("✅ Good - Aligned with LONG")
             elif position_side == "short":
@@ -338,14 +348,14 @@ class RSITradingEngine:
                 messages.append("💡 Signal: ENTER LONG")
                 
         elif zone == "exit":
-            messages.append(f"🟠 EXIT ZONE (near {self.EXIT_ZONE})")
+            messages.append(f"🟠 EXIT ZONE ({self.EXIT_ZONE_LOW}-{self.EXIT_ZONE_HIGH})")
             if pnl > 0:
                 messages.append(f"💰 In profit ${pnl:+.2f} - Consider closing")
             else:
                 messages.append("📉 Not in profit - Hold position")
                 
         else:
-            messages.append(f"⚪ NO-MAN ZONE ({self.OVERSOLD}-{self.OVERBOUGHT})")
+            messages.append(f"⚪ NO-MAN ZONE (outside entry/exit zones)")
             messages.append("🚫 No new entries allowed")
         
         return "\n".join(messages)
