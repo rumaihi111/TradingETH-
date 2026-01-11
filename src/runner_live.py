@@ -307,6 +307,20 @@ async def run_live_async():
             else:
                 result = ex.place_market(settings.trading_pair, new_side, size, 0.5)
             
+            # Check if order was rejected immediately
+            if isinstance(result, dict) and result.get("status") != "ok":
+                error_msg = result.get("error") or result.get("response", {}).get("error", "Unknown error")
+                print(f"❌ Order rejected: {error_msg}")
+                if telegram_bot:
+                    await telegram_bot.send_message(
+                        f"❌ **ORDER REJECTED**\n\n"
+                        f"Attempted: {new_side.upper()} {size:.4f} DOGE\n"
+                        f"Price: ${price:.4f}\n"
+                        f"Error: {error_msg}"
+                    )
+                await asyncio.sleep(sleep_interval)
+                continue
+            
             # Verify position
             position_found = False
             for attempt in range(5):
@@ -319,9 +333,31 @@ async def run_live_async():
                     break
             
             if not position_found:
-                print(f"⚠️ Position verification failed")
+                print(f"⚠️ Position verification failed - trade may not have executed!")
+                # Check the order result for errors
+                if isinstance(result, dict):
+                    error = result.get("error") or result.get("response", {}).get("error", "")
+                    if error:
+                        print(f"❌ Order error: {error}")
+                    if result.get("status") != "ok":
+                        print(f"❌ Order status not OK: {result}")
+                
+                # Send failure notification to Telegram
+                if telegram_bot:
+                    await telegram_bot.send_message(
+                        f"⚠️ **TRADE FAILED**\n\n"
+                        f"Attempted: {new_side.upper()} {size:.4f} DOGE\n"
+                        f"Price: ${price:.4f}\n"
+                        f"RSI: {rsi_decision.rsi_value:.2f}\n\n"
+                        f"❌ Position verification failed - check Hyperliquid!\n"
+                        f"Result: {result}"
+                    )
+                
+                # Skip recording and SL/TP placement since trade didn't go through
+                await asyncio.sleep(sleep_interval)
+                continue
             
-            # Record and notify
+            # Only record and notify if position was successfully verified
             pnl.record_trade("open", size, price)
             
             # Calculate SL/TP based on RSI decision
