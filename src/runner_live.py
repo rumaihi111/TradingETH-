@@ -35,7 +35,7 @@ def get_trading_timeframe() -> tuple[str, int]:
         tuple: (timeframe string for ccxt, sleep interval in seconds)
     """
     # Always use 5-minute chart
-    return "5m", 60  # Check every 60 seconds for 5m chart
+    return "5m", 30  # Check every 30 seconds for 5m chart
 
 
 def get_timeframe_display() -> str:
