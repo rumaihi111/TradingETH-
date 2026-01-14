@@ -18,8 +18,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application source
 COPY . /app
 
-# Persist runtime data (paper wallet, logs, history)
-VOLUME ["/app/data"]
-
 # Default command: live runner
 CMD ["python", "-m", "src.runner_live"]

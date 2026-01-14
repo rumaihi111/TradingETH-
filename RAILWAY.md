@@ -31,6 +31,8 @@ To preserve wallet state, history, and trade logs across deployments:
 4. Size: 1GB (minimum)
 5. Save and redeploy
 
+Note: Do NOT declare `VOLUME` in the Dockerfile — Railway disallows it. Use the UI volumes feature.
+
 **Without a volume:**
 - Paper wallet resets to $10k on every deploy
 - Claude history lost on redeploy
