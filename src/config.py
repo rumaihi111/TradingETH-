@@ -12,7 +12,7 @@ class Settings(BaseModel):
     hyperliquid_testnet: bool = Field(True, alias="HYPERLIQUID_TESTNET")
     anthropic_api_key: str = Field(..., alias="ANTHROPIC_API_KEY")
     venice_api_key: str = Field("", alias="VENICE_API_KEY")
-    venice_endpoint: str = Field("https://api.venice.ai/v1/chat/completions", alias="VENICE_ENDPOINT")
+    venice_endpoint: str = Field("https://api.venice.ai/api/v1/chat/completions", alias="VENICE_ENDPOINT")
     venice_model: str = Field("mistral-31-24b", alias="VENICE_MODEL")
     rpc_url: str = Field("", alias="RPC_URL")
     wallet_address: str = Field("", alias="WALLET_ADDRESS")
