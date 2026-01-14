@@ -1,6 +1,7 @@
 import httpx
 import base64
-from typing import Any, Dict, List, Optional
+import numpy as np
+from typing import Any, Dict, List, Optional, Tuple
 from io import BytesIO
 import pandas as pd
 import mplfinance as mpf
@@ -25,43 +26,109 @@ class AISignalClient:
         # Initialize Nested Fractal Brain for hive mind analysis
         self.fractal_brain = NestedFractalBrain(min_similarity=0.75, scale_ratio_min=2.0)
 
-    def _get_chart_image(self, candles: List[Dict[str, Any]]) -> Optional[str]:
-        """Generate candlestick chart from candle data and return base64 encoded image"""
+    def _calculate_rsi(self, closes: List[float], period: int = 14) -> List[float]:
+        """Calculate RSI values for the given closes"""
+        if len(closes) < period + 1:
+            return [50.0] * len(closes)
+        
+        deltas = np.diff(closes)
+        gains = np.where(deltas > 0, deltas, 0)
+        losses = np.where(deltas < 0, -deltas, 0)
+        
+        rsi_values = [np.nan] * period
+        
+        avg_gain = np.mean(gains[:period])
+        avg_loss = np.mean(losses[:period])
+        
+        for i in range(period, len(gains)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+            
+            if avg_loss == 0:
+                rsi_values.append(100.0)
+            else:
+                rs = avg_gain / avg_loss
+                rsi_values.append(100 - (100 / (1 + rs)))
+        
+        # Add one more for the last close
+        rsi_values.append(rsi_values[-1] if rsi_values else 50.0)
+        
+        return rsi_values
+
+    def _get_chart_image(self, candles: List[Dict[str, Any]], rsi_value: float = None) -> Optional[str]:
+        """Generate candlestick chart with RSI indicator from candle data and return base64 encoded image"""
         try:
             # Convert candles to DataFrame for mplfinance
             df_data = []
+            closes = []
             for candle in candles:
                 # Support both 'ts' and 'time' keys for timestamp
                 timestamp = candle.get('ts', candle.get('time', 0))
+                close_price = float(candle['close'])
+                closes.append(close_price)
                 df_data.append({
                     'Date': datetime.fromtimestamp(timestamp / 1000),
                     'Open': float(candle['open']),
                     'High': float(candle['high']),
                     'Low': float(candle['low']),
-                    'Close': float(candle['close']),
+                    'Close': close_price,
                     'Volume': float(candle['volume'])
                 })
             
             df = pd.DataFrame(df_data)
             df.set_index('Date', inplace=True)
             
-            # Create chart
+            # Calculate RSI(14)
+            rsi_values = self._calculate_rsi(closes, period=14)
+            df['RSI'] = rsi_values[:len(df)]
+            
+            # Get current RSI for display
+            current_rsi = rsi_values[-1] if rsi_values else 50.0
+            
+            # Create RSI panel as additional plot
+            # RSI zone lines: 35.28 (long entry), 50.44 (exit), 66.80 (short entry)
+            rsi_panel = [
+                mpf.make_addplot(df['RSI'], panel=2, color='purple', ylabel='RSI(14)', ylim=(0, 100)),
+            ]
+            
+            # Create horizontal lines for RSI zones
+            df['RSI_Long'] = 35.28
+            df['RSI_Exit'] = 50.44
+            df['RSI_Short'] = 66.80
+            
+            rsi_panel.extend([
+                mpf.make_addplot(df['RSI_Long'], panel=2, color='green', linestyle='--', secondary_y=False),
+                mpf.make_addplot(df['RSI_Exit'], panel=2, color='gray', linestyle=':', secondary_y=False),
+                mpf.make_addplot(df['RSI_Short'], panel=2, color='red', linestyle='--', secondary_y=False),
+            ])
+            
+            # Determine RSI zone for title
+            if current_rsi < 35.28:
+                rsi_zone = "LONG ZONE 📈"
+            elif current_rsi > 66.80:
+                rsi_zone = "SHORT ZONE 📉"
+            else:
+                rsi_zone = "NO-MAN'S LAND ⚠️"
+            
+            # Create chart with RSI panel
             buf = BytesIO()
             mpf.plot(
                 df,
                 type='candle',
                 style='charles',
-                title='ETH/USDC 5-Minute Chart',
+                title=f'ETH/USDC 5-Min | RSI({14}): {current_rsi:.2f} - {rsi_zone}',
                 ylabel='Price (USDC)',
                 volume=True,
-                figsize=(14, 8),
+                addplot=rsi_panel,
+                figsize=(14, 10),
+                panel_ratios=(3, 1, 1.5),  # Price, Volume, RSI
                 savefig=dict(fname=buf, dpi=100, bbox_inches='tight')
             )
             
             # Encode to base64
             buf.seek(0)
             image_b64 = base64.b64encode(buf.read()).decode('utf-8')
-            print(f"✅ Chart image generated successfully ({len(image_b64)} chars)")
+            print(f"✅ Chart with RSI generated (RSI: {current_rsi:.2f} - {rsi_zone})")
             return image_b64
             
         except Exception as e:

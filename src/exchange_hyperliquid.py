@@ -127,8 +127,30 @@ class HyperliquidClient:
             traceback.print_exc()
             return {"status": "error", "error": str(e)}
 
+    def cancel_all_orders(self, symbol: str) -> Dict[str, Any]:
+        """Cancel all open orders for a symbol (including SL/TP)"""
+        try:
+            print(f"🧹 Cancelling all open orders for {symbol}...")
+            result = self.exchange.cancel_all_orders(symbol)
+            print(f"✅ Cancelled orders: {result}")
+            return {"status": "ok", "result": result}
+        except Exception as e:
+            print(f"⚠️ Failed to cancel orders: {e}")
+            return {"status": "error", "error": str(e)}
+
+    def get_open_orders(self, symbol: str = None) -> List[Dict[str, Any]]:
+        """Get all open orders (including trigger orders)"""
+        try:
+            open_orders = self.info.open_orders(self.account_address)
+            if symbol:
+                open_orders = [o for o in open_orders if o.get("coin") == symbol]
+            return open_orders
+        except Exception as e:
+            print(f"⚠️ Failed to get open orders: {e}")
+            return []
+
     def close_position(self, symbol: str, size: Optional[float] = None, max_slippage_pct: float = 0.5, price: float = None) -> Dict[str, Any]:
-        """Close position (price param for API compatibility, not used)"""
+        """Close position and cancel associated SL/TP orders"""
         slippage = max_slippage_pct / 100
         # Round size to 4 decimals if provided
         if size is not None:
@@ -141,6 +163,9 @@ class HyperliquidClient:
         if positions:
             entry_price = positions[0].get("entry_price", 0)
             position_size = abs(positions[0].get("size", 0))
+        
+        # Cancel all existing orders (SL/TP) before closing
+        self.cancel_all_orders(symbol)
         
         print(f"🚨 CLOSING: {symbol} position")
         result = self.exchange.market_close(symbol, sz=size, px=None, slippage=slippage)
