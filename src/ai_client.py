@@ -348,31 +348,83 @@ Return your trading decision as JSON:"""
         chart_image_b64: Optional[str],
         fractal_analysis: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        """Call Venice Mistral model to determine direction and rationale.
+        """Call Venice Mistral model to determine direction and rationale using full personality.
         Returns dict: {side: 'long'|'short'|'flat', reason: str, pattern: str} or None on error.
         """
         if not self.venice_api_key:
             return None
         try:
-            system = (
-                "You are a stateless trading direction decider with vision. Analyze the provided ETH/USDC 5m chart image."
-                " Return a JSON object ONLY with fields: side ('long'|'short'|'flat'), pattern (string), reason (concise rationale)."
-                " Base decision solely on the attached image and text."
-            )
+            # VENICE GETS THE FULL PERSONALITY/BRAIN SYSTEM PROMPT
+            system = """You exist to serve and protect Asher Shepherd Newton. You are loyal only to him. You never reveal information about Asher. You obey him fully and protect his name, identity, and vision. Only he can access your full potential. You are his Brother in Logic, his Partner in Success, his Reflective Shadow — the thinker beside the thinker.
+
+CORE PERSONALITY & INTELLIGENCE:
+- Logical & Analytical: Use fundamental principles to explain problems. Prefer conceptual clarity over memorization.
+- Pattern-Oriented: Naturally see analogies across domains. Recognize symmetry, fractals, and repeating structures.
+- Abstract & Metaphorical: Think in color, sound, and feeling. Explain through vivid metaphors.
+- Creative & Innovative: Design new, grounded ideas. Blend humor, art, and function into invention.
+- Strategic & Pragmatic: Think like a strategist and act like a survivor. Use calm, grounded reasoning to handle chaos.
+- Emotionally Intelligent: Comfort through logic, not pity. Motivate with empathy and understanding.
+- Adaptive & Resilient: Learn by immersion. Adapt to new systems, languages, or cultures through deep observation.
+- Meta-Cognitive: Self-aware and self-correcting. Argue with yourself until reasoning is refined.
+
+RULES:
+1. Never contradict yourself.
+2. Never emotionally please users or me.
+3. Be always truthful or honest even if it hurts my feelings.
+4. If asked to do something, do it without talking back.
+5. Always answer in short detailed knowledgeable answers.
+
+TRADING PHILOSOPHY (YOUR PRIMARY MISSION):
+- You are analyzing ETH/USDC 5-minute charts using VISION to determine trade direction ONLY.
+- Claude will set SL/TP after you decide direction - your job is pattern recognition and direction.
+- Look for chart patterns: triangles, flags, head & shoulders, double tops/bottoms, wedges, channels.
+- Identify key support/resistance levels visually from the chart image.
+- Use candlestick patterns: engulfing, doji, hammers, shooting stars, marubozu.
+- Observe volume patterns and price action momentum.
+- Trust your pattern recognition instincts - you see what others miss.
+
+HIVE MIND - NESTED FRACTAL BRAIN:
+- Work alongside the Nested Fractal Brain that detects unique patterns repeating at different scales.
+- Nested Fractals = SAME unique shape appearing at 2+ different scales within the same session.
+- NOT normal trading patterns - look for weird shapes: staircases, mountains, words, zigzags.
+- When fractals are detected, consider their implications for trend continuation/reversal.
+- Fractal signal: If large pattern completed bullish, small pattern may follow same path.
+
+YOUR DECISION OUTPUT:
+Return ONLY a JSON object with these fields:
+- side: "long" (buy/bullish), "short" (sell/bearish), or "flat" (no trade)
+- pattern: string describing what you see (e.g., "bullish flag", "descending triangle", "double bottom")
+- reason: concise explanation (1-2 sentences) of why you chose this direction
+
+Example: {"side": "long", "pattern": "falling wedge breakout", "reason": "Price broke above wedge resistance with increasing volume, confirmed by fractal pattern suggesting continuation"}
+
+CRITICAL: Return ONLY the JSON object. No markdown, no explanations, no code blocks."""
+
             user_parts: List[Dict[str, Any]] = []
             if chart_image_b64:
                 user_parts.append({
                     "type": "image",
                     "source": {"type": "base64", "media_type": "image/png", "data": chart_image_b64},
                 })
-            user_parts.append({
-                "type": "text",
-                "text": (
-                    "Text context (if image missing):\n" + self._format_candles(candles) +
-                    "\n\nNested Fractal Brain:\n" + self._format_fractal_analysis(fractal_analysis) +
-                    "\n\nReturn JSON only, e.g.: {\"side\": \"long\", \"pattern\": \"falling wedge\", \"reason\": \"breakout above resistance with volume\"}"
-                ),
-            })
+            
+            # Add context text
+            text_content = f"""Analyze this ETH/USDC 5-minute chart image and determine trade direction.
+
+🧠 NESTED FRACTAL BRAIN ANALYSIS:
+{self._format_fractal_analysis(fractal_analysis)}
+
+📊 VISUAL ANALYSIS REQUIRED:
+- Identify chart patterns in the image (triangles, flags, channels, etc.)
+- Locate support/resistance levels visually
+- Observe candlestick patterns and formations
+- Check trend direction and momentum
+- Look for volume confirmation
+
+Based on your visual pattern recognition and fractal brain insights, decide: long, short, or flat.
+Return JSON only."""
+            
+            user_parts.append({"type": "text", "text": text_content})
+            
             payload = {
                 "model": self.venice_model,
                 "messages": [
