@@ -84,16 +84,35 @@ class AISignalClient:
         if self.history_store:
             recent_decisions = self.history_store.recent_decisions(hours=self.history_hours)
         
-        # HIVE MIND: Consult Nested Fractal Brain first
+        # HIVE MIND: Consult Nested Fractal Brain first (with timeout to prevent blocking)
         print("\n🧠 FRACTAL BRAIN: Analyzing for nested fractal patterns...")
-        fractal_analysis = self.fractal_brain.analyze(candles)
+        import signal
         
-        if fractal_analysis['fractals_found']:
-            print(f"✅ Found {fractal_analysis['pattern_count']} nested fractal pattern(s)!")
-            for i, pattern in enumerate(fractal_analysis['patterns'], 1):
-                print(f"   Pattern {i}: {pattern['shape']} (similarity: {pattern['similarity']:.2%}, scale: {pattern['scale_ratio']:.1f}x)")
-        else:
-            print(f"⚠️ {fractal_analysis['reason']}")
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Fractal brain analysis timed out")
+        
+        # Set 5 second timeout for fractal analysis
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(5)
+        
+        try:
+            fractal_analysis = self.fractal_brain.analyze(candles)
+            signal.alarm(0)  # Cancel alarm
+            
+            if fractal_analysis['fractals_found']:
+                print(f"✅ Found {fractal_analysis['pattern_count']} nested fractal pattern(s)!")
+                for i, pattern in enumerate(fractal_analysis['patterns'], 1):
+                    print(f"   Pattern {i}: {pattern['shape']} (similarity: {pattern['similarity']:.2%}, scale: {pattern['scale_ratio']:.1f}x)")
+            else:
+                print(f"⚠️ {fractal_analysis['reason']}")
+        except TimeoutError:
+            signal.alarm(0)
+            print("⚠️ Fractal brain timeout - skipping nested fractal analysis")
+            fractal_analysis = {
+                "fractals_found": False,
+                "reason": "Analysis timed out (>5s)",
+                "patterns": []
+            }
         print()
         
         # SYSTEM PROMPT (Persistent Instructions)
