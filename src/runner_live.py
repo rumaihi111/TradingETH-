@@ -23,9 +23,7 @@ async def run_live_async():
     settings = load_settings()
     history = HistoryStore()
     trade_log = TradeLogger()
-    ai = AISignalClient(
-        api_key=settings.anthropic_api_key,
-        history_store=history,
+    ai = AISignalClient(api_key=settings.anthropic_api_key, history_store=history,
         venice_api_key=settings.venice_api_key,
         venice_endpoint=settings.venice_endpoint,
         venice_model=settings.venice_model,
@@ -105,9 +103,14 @@ async def run_live_async():
                 await asyncio.sleep(300)  # Wait 5 minutes before next trade
                 continue
         
-        # Calculate unrealized P&L from open position
+        # Calculate unrealized P&L from open position and check SL/TP levels
         unrealized_pnl = 0
         position_value = 0
+        sl_distance_pct = None
+        tp_distance_pct = None
+        sl_hit = False
+        tp_hit = False
+        
         if open_positions:
             pos = open_positions[0]
             pos_size = pos.get("size", 0)
@@ -115,7 +118,63 @@ async def run_live_async():
             if pos_size != 0 and entry_price != 0:
                 position_value = abs(pos_size) * price
                 unrealized_pnl = (price - entry_price) * pos_size
-                print(f"💰 Unrealized P&L: ${unrealized_pnl:+.2f}")
+                pnl_pct = ((price - entry_price) / entry_price) * (1 if pos_size > 0 else -1)
+                
+                # Check stored SL/TP from last decision
+                if self.history_store:
+                    recent_decisions = self.history_store.recent_decisions(hours=3)
+                    last_decision = recent_decisions[-1].get('decision', {}) if recent_decisions else {}
+                else:
+                    last_decision = {}
+                sl_pct = last_decision.get('stop_loss_pct', 0)
+                tp_pct = last_decision.get('take_profit_pct', 0)
+                
+                if sl_pct > 0:
+                    if pos_size > 0:  # LONG
+                        sl_distance_pct = pnl_pct + sl_pct  # positive if above SL
+                        sl_hit = price <= entry_price * (1 - sl_pct)
+                    else:  # SHORT
+                        sl_distance_pct = -pnl_pct + sl_pct
+                        sl_hit = price >= entry_price * (1 + sl_pct)
+                
+                if tp_pct > 0:
+                    if pos_size > 0:  # LONG
+                        tp_distance_pct = tp_pct - pnl_pct  # positive if below TP
+                        tp_hit = price >= entry_price * (1 + tp_pct)
+                    else:  # SHORT
+                        tp_distance_pct = tp_pct + pnl_pct
+                        tp_hit = price <= entry_price * (1 - tp_pct)
+                
+                print(f"💰 Unrealized P&L: ${unrealized_pnl:+.2f} ({pnl_pct*100:+.2f}%)")
+                if sl_distance_pct is not None:
+                    print(f"🛡️ Stop Loss: {sl_distance_pct*100:+.2f}% away" + (" ❌ HIT" if sl_hit else ""))
+                if tp_distance_pct is not None:
+                    print(f"🎯 Take Profit: {tp_distance_pct*100:+.2f}% away" + (" ✅ HIT" if tp_hit else ""))
+                
+                # Auto-close if SL/TP hit (paper mode or backup for trigger failure)
+                if (sl_hit or tp_hit) and use_paper:
+                    reason = "Stop Loss" if sl_hit else "Take Profit"
+                    print(f"🔔 {reason} triggered @ ${price:.2f}, closing position...")
+                    close_result = ex.close_position(settings.trading_pair, price=price)
+                    pnl_value = close_result.get("pnl", unrealized_pnl)
+                    pnl.record_trade("close", abs(pos_size), entry_price, price, pnl_value)
+                    rm_update = risk_manager.on_trade_closed(
+                        pnl_value,
+                        settings.pause_consecutive_losses,
+                        settings.pause_duration_hours * 3600,
+                    )
+                    if telegram_bot:
+                        await telegram_bot.notify_trade_closed(
+                            "long" if pos_size > 0 else "short",
+                            abs(pos_size),
+                            entry_price,
+                            price,
+                            pnl_value
+                        )
+                    trade_log.log_trade({"decision": {"side": "close", "reason": reason}, "result": close_result, "price": price})
+                    guard.record_close()
+                    await asyncio.sleep(300)
+                    continue
         
         # Pass position object to balance sheet instead of position_value
         current_position = open_positions[0] if open_positions else None

@@ -235,9 +235,26 @@ Return your trading decision as JSON:"""
         # Constrain Claude's role depending on context
         if current_position is not None:
             pos_side = "long" if current_position.get("size", 0) > 0 else "short"
-            system_prompt = system_prompt + (
-                "\n\nMONITORING MODE:\n- You are monitoring an OPEN position. Decide whether to CLOSE (side=\"flat\") or HOLD (side=\"" + pos_side + "\"). Do NOT flip direction while monitoring."
-            )
+            entry = current_position.get("entry", 0)
+            current_price = candles[-1]["close"] if candles else 0
+            pnl_pct = ((current_price - entry) / entry) * (1 if current_position.get("size", 0) > 0 else -1) if entry > 0 else 0
+            
+            # Get SL/TP from recent decision
+            last_decision = recent_decisions[-1].get('decision', {}) if recent_decisions else {}
+            sl_pct = last_decision.get('stop_loss_pct', 0)
+            tp_pct = last_decision.get('take_profit_pct', 0)
+            
+            monitor_info = f"\n\nMONITORING MODE:\n- You are monitoring an OPEN {pos_side.upper()} position.\n"
+            monitor_info += f"- Entry: ${entry:.2f}, Current: ${current_price:.2f}, Unrealized P&L: {pnl_pct*100:+.2f}%\n"
+            if sl_pct > 0:
+                monitor_info += f"- Stop Loss set at {sl_pct*100:.1f}% from entry\n"
+            if tp_pct > 0:
+                monitor_info += f"- Take Profit set at {tp_pct*100:.1f}% from entry\n"
+            monitor_info += "- Decide whether to CLOSE (side=\"flat\") or HOLD (side=\"" + pos_side + "\").\n"
+            monitor_info += "- Close if: SL/TP reached, reversal pattern detected, or risk increases.\n"
+            monitor_info += "- Hold if: trend intact, price action supports continuation.\n"
+            monitor_info += "- Do NOT flip direction while monitoring."
+            system_prompt = system_prompt + monitor_info
         elif venice_side:
             extra = "\n\nDIRECTION PROVIDED:\n- Use this side decided by Venice: side=\"" + venice_side + "\".\n"
             if venice_pattern:
