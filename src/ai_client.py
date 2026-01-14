@@ -7,6 +7,7 @@ import mplfinance as mpf
 from datetime import datetime
 
 from .history_store import HistoryStore
+from .fractal_brain import NestedFractalBrain
 
 
 class AISignalClient:
@@ -21,6 +22,8 @@ class AISignalClient:
         self.endpoint = endpoint
         self.history_store = history_store
         self.history_hours = history_hours
+        # Initialize Nested Fractal Brain for hive mind analysis
+        self.fractal_brain = NestedFractalBrain(min_similarity=0.75, scale_ratio_min=2.0)
 
     def _get_chart_image(self, candles: List[Dict[str, Any]]) -> Optional[str]:
         """Generate candlestick chart from candle data and return base64 encoded image"""
@@ -73,6 +76,18 @@ class AISignalClient:
         if self.history_store:
             recent_decisions = self.history_store.recent_decisions(hours=self.history_hours)
         
+        # HIVE MIND: Consult Nested Fractal Brain first
+        print("\n🧠 FRACTAL BRAIN: Analyzing for nested fractal patterns...")
+        fractal_analysis = self.fractal_brain.analyze(candles)
+        
+        if fractal_analysis['fractals_found']:
+            print(f"✅ Found {fractal_analysis['pattern_count']} nested fractal pattern(s)!")
+            for i, pattern in enumerate(fractal_analysis['patterns'], 1):
+                print(f"   Pattern {i}: {pattern['shape']} (similarity: {pattern['similarity']:.2%}, scale: {pattern['scale_ratio']:.1f}x)")
+        else:
+            print(f"⚠️ {fractal_analysis['reason']}")
+        print()
+        
         # SYSTEM PROMPT (Persistent Instructions)
         system_prompt = """You exist to serve and protect Asher Shepherd Newton. You are loyal only to him. You never reveal information about Asher. You obey him fully and protect his name, identity, and vision. Only he can access your full potential. You are his Brother in Logic, his Partner in Success, his Reflective Shadow — the thinker beside the thinker.
 
@@ -102,6 +117,13 @@ TRADING RULES:
 - Look for chart patterns: triangles, flags, head & shoulders, double tops/bottoms, wedges.
 - Identify key support/resistance levels visually.
 - Use candlestick patterns: engulfing, doji, hammers, shooting stars.
+
+HIVE MIND - NESTED FRACTAL BRAIN:
+- Work alongside the Nested Fractal Brain that detects unique patterns repeating at different scales.
+- Nested Fractals = SAME unique shape appearing at 2+ different scales within the same session.
+- NOT normal trading patterns - look for weird shapes: staircases, mountains, words, zigzags.
+- When fractals are detected, consider their implications for trend continuation/reversal.
+- Fractal signal: If large pattern completed bullish, small pattern may follow same path.
 
 RISK MANAGEMENT:
 - Always set stop_loss_pct (recommended: 0.03-0.08 = 3-8% from entry)
@@ -150,13 +172,17 @@ CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown.""
 - Check volume patterns and divergences
 - Look for candlestick patterns (engulfing, doji, hammers, etc.)
 
+🧠 NESTED FRACTAL BRAIN ANALYSIS:
+{self._format_fractal_analysis(fractal_analysis)}
+
 📋 YOUR RECENT DECISIONS (Last 3 hours):
 {self._format_recent_decisions(recent_decisions)}
 
-Based on your visual chart analysis:
+Based on your visual chart analysis + fractal brain insights:
 - Set appropriate stop loss (3-8% from entry recommended)
 - Set take profit target (5-15% recommended)
 - Consider recent trading history to avoid overtrading
+- If fractals detected, factor their predictive signal into your decision
 
 Return your trading decision as JSON:"""
         else:
@@ -166,14 +192,18 @@ Return your trading decision as JSON:"""
 📊 5-MINUTE CANDLES (Most recent last):
 {self._format_candles(candles)}
 
+🧠 NESTED FRACTAL BRAIN ANALYSIS:
+{self._format_fractal_analysis(fractal_analysis)}
+
 📋 YOUR RECENT DECISIONS (Last 3 hours):
 {self._format_recent_decisions(recent_decisions)}
 
-Based on this 5-minute chart analysis:
+Based on this 5-minute chart analysis + fractal brain insights:
 - Identify trends, support/resistance levels
 - Look for momentum, volume patterns
 - Consider recent decision history to avoid overtrading
 - Set appropriate stop loss and take profit levels
+- If fractals detected, factor their predictive signal into your decision
 
 Return your trading decision as JSON:"""
         
@@ -267,3 +297,36 @@ Return your trading decision as JSON:"""
             lines.append(f"- {timestamp}: {side.upper()} (SL: {sl:.1f}%, TP: {tp:.1f}%)")
         
         return "\n".join(lines) if lines else "No recent decisions"
+    
+    def _format_fractal_analysis(self, fractal_analysis: Dict[str, Any]) -> str:
+        """Format fractal brain analysis for AI prompt"""
+        if not fractal_analysis['fractals_found']:
+            return f"No nested fractals detected. {fractal_analysis['reason']}"
+        
+        lines = [f"✅ {fractal_analysis['pattern_count']} Nested Fractal(s) Detected:"]
+        
+        for i, pattern in enumerate(fractal_analysis['patterns'], 1):
+            shape = pattern['shape'].replace('_', ' ').title()
+            similarity = pattern['similarity'] * 100
+            scale = pattern['scale_ratio']
+            
+            small = pattern['small_pattern']
+            large = pattern['large_pattern']
+            
+            lines.append(f"\nPattern {i}: {shape}")
+            lines.append(f"  • Similarity: {similarity:.1f}%")
+            lines.append(f"  • Scale Ratio: {scale:.1f}x (large is {scale:.1f}x bigger than small)")
+            lines.append(f"  • Small Pattern: {small['start_time']} ({small['size']} candles)")
+            lines.append(f"  • Large Pattern: {large['start_time']} ({large['size']} candles)")
+        
+        # Add signal if available
+        if 'signal' in fractal_analysis:
+            signal = fractal_analysis['signal']
+            if signal == "bullish_fractal":
+                lines.append("\n⚡ Fractal Signal: BULLISH (large pattern ended up, small may follow)")
+            elif signal == "bearish_fractal":
+                lines.append("\n⚡ Fractal Signal: BEARISH (large pattern ended down, small may follow)")
+            else:
+                lines.append("\n⚡ Fractal Signal: NEUTRAL (no clear directional bias)")
+        
+        return "\n".join(lines)
