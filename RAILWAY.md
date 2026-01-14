@@ -67,6 +67,12 @@ Look for:
 - Check logs for errors (Binance geo-block = use KuCoin)
 - Verify ANTHROPIC_API_KEY is valid
 
+**Build error: `secret Venice: not found`**
+- Railway’s Nixpacks builder sometimes references BuildKit secrets when misconfigured.
+- Fix options:
+	- Ensure you use env var `VENICE_API_KEY` (not a secret named `Venice`). Remove any build secret references named `Venice`.
+	- Or add the provided `Dockerfile` (already in repo) to force Docker build and bypass Nixpacks/mise entirely.
+
 **Wallet resets on deploy:**
 - Volume not mounted at `/app/data`
 - Check Settings → Volumes
