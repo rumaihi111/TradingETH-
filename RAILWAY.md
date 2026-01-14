@@ -10,9 +10,16 @@
 Go to Settings → Variables and add:
 ```
 ANTHROPIC_API_KEY=sk-ant-api03-...
+VENICE_API_KEY=venice_live_key...
 PAPER_MODE=true
 PAPER_INITIAL_EQUITY=10000
 HYPERLIQUID_TESTNET=true
+```
+
+Optional overrides (defaults are fine):
+```
+VENICE_ENDPOINT=https://api.venice.ai/v1/chat/completions
+VENICE_MODEL=mistral-31-24b
 ```
 
 ### 3. **CRITICAL: Add Persistent Volume**
@@ -42,6 +49,7 @@ railway logs
 
 Look for:
 - `💰 Current Wallet: $X.XX` - Wallet balance before each query
+- `🤖 Venice direction:` - Direction, detected pattern, and rationale
 - `CLAUDE QUERY:` - Full personality prompt sent
 - `CLAUDE RESPONSE (raw):` - Claude's decision
 - `Trade placed:` - Execution confirmation

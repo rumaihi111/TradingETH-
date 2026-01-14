@@ -17,6 +17,7 @@ export HYPERLIQUID_SECRET=...
 export HYPERLIQUID_BASE_URL=""        # optional override; SDK uses constants
 export HYPERLIQUID_TESTNET=true
 export ANTHROPIC_API_KEY=...
+export VENICE_API_KEY=...
 export RPC_URL=...
 export WALLET_ADDRESS=...
 export PRIVATE_KEY=...
@@ -44,6 +45,7 @@ export PAPER_INITIAL_EQUITY=10000
 ## Notes
 - Hyperliquid client now uses the official SDK; sizing/price feed still TODO.
 - AI prompt/response parsing is minimal; return JSON with side/size/stop/tp/slippage.
+- Direction is determined by Venice (vision); Claude (vision) validates the pattern and computes SL/TP.
 - Cooldown and sizing caps are enforced in `risk.py`.
 
 ## Trading Rules & Alerts
@@ -66,3 +68,5 @@ export PAPER_INITIAL_EQUITY=10000
 - `PAUSE_CONSECUTIVE_LOSSES` (default `3`), `PAUSE_DURATION_HOURS` (default `24`)
 - `SHUTDOWN_DURATION_HOURS` (default `24`)
 - `VOLATILITY_THRESHOLD_PCT` (default `0.02`)
+ - `VENICE_ENDPOINT` (default `https://api.venice.ai/v1/chat/completions`)
+ - `VENICE_MODEL` (default `mistral-31-24b`)

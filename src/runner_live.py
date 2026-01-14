@@ -23,7 +23,13 @@ async def run_live_async():
     settings = load_settings()
     history = HistoryStore()
     trade_log = TradeLogger()
-    ai = AISignalClient(api_key=settings.anthropic_api_key, history_store=history)
+    ai = AISignalClient(
+        api_key=settings.anthropic_api_key,
+        history_store=history,
+        venice_api_key=settings.venice_api_key,
+        venice_endpoint=settings.venice_endpoint,
+        venice_model=settings.venice_model,
+    )
     use_paper = settings.paper_mode
     if use_paper:
         ex = PaperExchange(starting_equity=settings.paper_initial_equity)
@@ -137,13 +143,15 @@ async def run_live_async():
             await asyncio.sleep(300)
             continue
 
-        # Check if we should query Claude (respect cooldown)
+        # Check if we should query AI (respect cooldown)
         if not guard.allow_new_trade():
             print(f"⏸️  Cooldown active, waiting...")
             await asyncio.sleep(60)  # Check again in 1 minute
             continue
         
-        decision_raw: Dict = ai.fetch_signal(candles)
+        # Current position passed to AI for monitoring/decision routing
+        current_position = open_positions[0] if open_positions else None
+        decision_raw: Dict = ai.fetch_signal(candles, current_position=current_position)
         trade = clamp_decision(decision_raw, settings.max_position_fraction)
 
         # Determine current position state
@@ -316,7 +324,9 @@ async def run_live_async():
                     lev = poslist[0].get("leverage") or None
             except Exception:
                 lev = None
-            why_summary = "5m price-action entry; invalidation at SL"
+            why_summary = decision_raw.get("venice_reason") or (
+                "5m price-action entry; invalidation at SL"
+            )
             await telegram_bot.notify_trade_opened(
                 trade.side,
                 size,

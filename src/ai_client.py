@@ -17,11 +17,17 @@ class AISignalClient:
         endpoint: str = "https://api.anthropic.com/v1/messages",
         history_store: Optional[HistoryStore] = None,
         history_hours: int = 3,
+        venice_api_key: Optional[str] = None,
+        venice_endpoint: str = "https://api.venice.ai/v1/chat/completions",
+        venice_model: str = "mistral-31-24b",
     ):
         self.api_key = api_key
         self.endpoint = endpoint
         self.history_store = history_store
         self.history_hours = history_hours
+        self.venice_api_key = venice_api_key
+        self.venice_endpoint = venice_endpoint
+        self.venice_model = venice_model
         # Initialize Nested Fractal Brain for hive mind analysis
         self.fractal_brain = NestedFractalBrain(min_similarity=0.75, scale_ratio_min=2.0)
 
@@ -69,7 +75,12 @@ class AISignalClient:
             print(f"   Falling back to text-based analysis")
             return None
 
-    def fetch_signal(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def fetch_signal(
+        self,
+        candles: List[Dict[str, Any]],
+        current_position: Optional[Dict[str, Any]] = None,
+        chart_image_b64: Optional[str] = None,
+    ) -> Dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("ANTHROPIC_API_KEY missing")
         # Use only the last 350 candles for analysis and charting
@@ -147,8 +158,8 @@ Example: {"side": "long", "position_fraction": 0.8, "stop_loss_pct": 0.04, "take
 
 CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown."""
 
-        # Generate chart image from candle data for visual analysis
-        chart_image = self._get_chart_image(candles)
+        # Generate chart image from candle data for visual analysis unless a screenshot is provided
+        chart_image = chart_image_b64 or self._get_chart_image(candles)
         
         # Build user message with image + text prompt
         user_content = []
@@ -214,6 +225,33 @@ Return your trading decision as JSON:"""
             "text": text_prompt
         })
 
+        # Determine trade direction using Venice (when not monitoring an open position)
+        venice_side: Optional[str] = None
+        venice_reason: Optional[str] = None
+        venice_pattern: Optional[str] = None
+        if current_position is None:
+            venice_decision = self._get_direction_with_venice(candles, chart_image, fractal_analysis)
+            if venice_decision and venice_decision.get("side"):
+                venice_side = venice_decision.get("side")
+                venice_reason = venice_decision.get("reason")
+                venice_pattern = venice_decision.get("pattern")
+                print(f"🤖 Venice direction: {venice_side.upper()} — {venice_pattern or 'pattern'} | {venice_reason or 'no rationale'}")
+
+        # Constrain Claude's role depending on context
+        if current_position is not None:
+            pos_side = "long" if current_position.get("size", 0) > 0 else "short"
+            system_prompt = system_prompt + (
+                "\n\nMONITORING MODE:\n- You are monitoring an OPEN position. Decide whether to CLOSE (side=\"flat\") or HOLD (side=\"" + pos_side + "\"). Do NOT flip direction while monitoring."
+            )
+        elif venice_side:
+            extra = "\n\nDIRECTION PROVIDED:\n- Use this side decided by Venice: side=\"" + venice_side + "\".\n"
+            if venice_pattern:
+                extra += "- Venice pattern: " + venice_pattern + "\n"
+            if venice_reason:
+                extra += "- Venice rationale: " + venice_reason + "\n"
+            extra += "- Do NOT change the side; only set stop_loss_pct, take_profit_pct, max_slippage_pct.\n- Validate the described pattern in the image/data and base SL/TP on real support/resistance and volatility."
+            system_prompt = system_prompt + extra
+
         payload = {
             "model": "claude-3-haiku-20240307",
             "max_tokens": 256,
@@ -256,6 +294,13 @@ Return your trading decision as JSON:"""
             
             json_str = combined[start:end].strip()
             parsed = json.loads(json_str)
+            # Enforce Venice side if provided (opening decision only)
+            if venice_side:
+                parsed["side"] = venice_side
+                if venice_reason:
+                    parsed["venice_reason"] = venice_reason
+                if venice_pattern:
+                    parsed["venice_pattern"] = venice_pattern
             
             if self.history_store:
                 self.history_store.record_decision(parsed)
@@ -265,25 +310,118 @@ Return your trading decision as JSON:"""
 
     def _format_candles(self, candles: List[Dict[str, Any]]) -> str:
         """Format candles for display in prompt"""
-        if not candles:
-            return "No candle data available"
-        
-        # Show last 20 candles
-        recent = candles[-20:] if len(candles) > 20 else candles
-        lines = ["Time          Open      High      Low       Close     Volume"]
-        lines.append("-" * 70)
-        
-        for c in recent:
-            timestamp = c.get('time', 'Unknown')
+        def _get_direction_with_venice(
+            self,
+            candles: List[Dict[str, Any]],
+            chart_image_b64: Optional[str],
+            fractal_analysis: Dict[str, Any],
+        ) -> Optional[Dict[str, Any]]:
+            """Call Venice Mistral model to determine direction and rationale.
+            Returns dict: {side: 'long'|'short'|'flat', reason: str, pattern: str} or None on error.
+            """
             open_price = c.get('open', 0)
-            high = c.get('high', 0)
+                return None
             low = c.get('low', 0)
-            close = c.get('close', 0)
-            volume = c.get('volume', 0)
-            
+                system = (
+                    "You are a stateless trading direction decider with vision. Analyze the provided ETH/USDC 5m chart image."
+                    " Return a JSON object ONLY with fields: side ('long'|'short'|'flat'), pattern (string), reason (concise rationale)."
+                    " Base decision solely on the attached image and text."
+                )
             lines.append(f"{timestamp:<12}  ${open_price:<8.2f} ${high:<8.2f} ${low:<8.2f} ${close:<8.2f} {volume:<10.2f}")
         
         return "\n".join(lines)
+
+    def _get_direction_with_venice(
+        self,
+        chart_image_b64: Optional[str],
+        recent_decisions: List[Dict[str, Any]],
+        fractal_analysis: Dict[str, Any],
+                        "Text context (if image missing):\n" + self._format_candles(candles) +
+                        "\n\nNested Fractal Brain:\n" + self._format_fractal_analysis(fractal_analysis) +
+                        "\n\nReturn JSON only, e.g.: {\"side\": \"long\", \"pattern\": \"falling wedge\", \"reason\": \"breakout above resistance with volume\"}"
+        if not self.venice_api_key:
+            return None
+        try:
+            system = (
+                "You are a trading direction decider. Analyze ETH/USDC 5m context and return ONLY one token: LONG, SHORT, or FLAT. Consider nested fractal brain summary when available."
+            )
+            user_parts: List[Dict[str, Any]] = []
+            if chart_image_b64:
+                user_parts.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/png", "data": chart_image_b64},
+                })
+            user_parts.append({
+                "type": "text",
+                "text": (
+                    "Recent candles (last 20):\n" + self._format_candles(candles) +
+                    "\n\nNested Fractal Brain:\n" + self._format_fractal_analysis(fractal_analysis) +
+                    "\n\nRecent decisions:\n" + self._format_recent_decisions(recent_decisions) +
+                text = None
+                ),
+            })
+            payload = {
+                "model": self.venice_model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_parts},
+                ],
+                    return None
+                # Try to parse JSON object
+                import json as _json
+                decision_obj = None
+                try:
+                    start = text.find("{")
+                    end = text.rfind("}") + 1
+                    if start != -1 and end > start:
+                        decision_obj = _json.loads(text[start:end])
+                except Exception:
+                    decision_obj = None
+                if not decision_obj:
+                    # Fallback: extract tokens from text
+                    normalized = text.strip().upper()
+                    if "LONG" in normalized and "SHORT" in normalized:
+                        side_token = "long" if normalized.index("LONG") < normalized.index("SHORT") else "short"
+                    elif "LONG" in normalized:
+                        side_token = "long"
+                    elif "SHORT" in normalized:
+                        side_token = "short"
+                    elif "FLAT" in normalized or "NEUTRAL" in normalized:
+                        side_token = "flat"
+                    else:
+                        side_token = None
+                    decision_obj = {"side": side_token, "pattern": None, "reason": text.strip()} if side_token else None
+                # Normalize side
+                side = (decision_obj.get("side") or "").lower() if decision_obj else None
+                if side not in {"long", "short", "flat"}:
+                    return None
+                return {
+                    "side": side,
+                    "pattern": decision_obj.get("pattern"),
+                    "reason": decision_obj.get("reason"),
+                }
+            if not text and isinstance(data, dict) and "content" in data:
+                text = data.get("content")
+            if not text:
+                return None
+            normalized = text.strip().upper()
+            if "LONG" in normalized and "SHORT" in normalized:
+                if normalized.index("LONG") < normalized.index("SHORT"):
+                    token = "LONG"
+                else:
+                    token = "SHORT"
+            elif "LONG" in normalized:
+                token = "LONG"
+            elif "SHORT" in normalized:
+                token = "SHORT"
+            elif "FLAT" in normalized or "NEUTRAL" in normalized:
+                token = "FLAT"
+            else:
+                token = None
+            return token.lower() if token else None
+        except Exception as e:
+            print(f"⚠️ Venice direction fetch failed: {e}")
+            return None
     
     def _format_recent_decisions(self, decisions: List[Dict[str, Any]]) -> str:
         """Format recent decisions for display"""
