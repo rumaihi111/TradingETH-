@@ -23,7 +23,7 @@ class Settings(BaseModel):
     candle_limit: int = Field(350, ge=50, le=1000, alias="CANDLE_LIMIT")
     max_position_fraction: float = Field(0.95, ge=0, le=1, alias="MAX_POSITION_FRACTION")
     max_trades_per_hour: int = Field(2, ge=0)
-    cooldown_minutes: int = Field(30, ge=0)
+    cooldown_minutes: int = Field(10, ge=0)
     # Risk controls
     daily_loss_limit_pct: float = Field(0.06, ge=0, le=1, alias="DAILY_LOSS_LIMIT_PCT")
     pause_consecutive_losses: int = Field(3, ge=1, alias="PAUSE_CONSECUTIVE_LOSSES")
