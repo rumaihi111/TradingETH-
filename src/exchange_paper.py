@@ -51,15 +51,17 @@ class PaperExchange:
             raise RuntimeError("Paper mode requires price input")
         is_buy = side.lower() == "long"
         
-        # With leverage: size is multiplied, but margin (actual capital locked) is size * price / leverage
-        leveraged_size = size * self.leverage
-        signed_size = leveraged_size if is_buy else -leveraged_size
+        # Store the actual capital amount as unleveraged size (what user put in)
+        signed_size = size if is_buy else -size
         margin_required = abs(size) * price  # Capital locked for this position
+        
+        # Leveraged size is for display only
+        leveraged_size = size * self.leverage
         
         self.position = {"coin": symbol, "size": signed_size, "entry": price, "margin": margin_required}
         self.trades.append({"symbol": symbol, "side": side, "size": leveraged_size, "price": price, "type": "open", "margin": margin_required})
         self._save_state()
-        print(f"📈 Leveraged {self.leverage}x: Position size={leveraged_size:.4f} ETH, Margin=${margin_required:.2f}")
+        print(f"📈 Position: {abs(signed_size):.4f} ETH (${margin_required:.2f}), Leveraged {self.leverage}x = {leveraged_size:.4f} ETH")
         return {"status": "filled", "paper": True, "price": price, "size": leveraged_size, "side": side}
 
     def close_position(self, symbol: str, size: float = None, max_slippage_pct: float = 0.5, price: float = None) -> Dict[str, Any]:

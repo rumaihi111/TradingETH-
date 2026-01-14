@@ -18,7 +18,7 @@ class Settings(BaseModel):
     trading_pair: str = Field("ETH")  # Hyperliquid uses just "ETH" not "ETH-USDC"
     timeframe: str = Field("5m", alias="TIMEFRAME")
     candle_limit: int = Field(350, ge=50, le=1000, alias="CANDLE_LIMIT")
-    max_position_fraction: float = Field(0.8, ge=0, le=1, alias="MAX_POSITION_FRACTION")
+    max_position_fraction: float = Field(0.95, ge=0, le=1, alias="MAX_POSITION_FRACTION")
     max_trades_per_hour: int = Field(2, ge=0)
     cooldown_minutes: int = Field(30, ge=0)
     # Risk controls
