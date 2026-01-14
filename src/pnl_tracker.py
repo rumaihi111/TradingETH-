@@ -2,6 +2,7 @@ import json
 import os
 import time
 from typing import Dict, List
+from datetime import datetime, timezone
 
 
 class PnLTracker:
@@ -81,6 +82,43 @@ class PnLTracker:
             "avg_loss": (sum(t["pnl"] for t in losing) / len(losing)) if losing else 0,
             "largest_win": max((t["pnl"] for t in winning), default=0),
             "largest_loss": min((t["pnl"] for t in losing), default=0),
+        }
+
+    def _filter_period(self, period: str) -> List[Dict]:
+        """Return trades closed in the given period (UTC boundaries)."""
+        now = datetime.now(timezone.utc)
+        trades = [t for t in self.data.get("trades", []) if t.get("pnl") is not None]
+        result = []
+        for t in trades:
+            dt = datetime.fromtimestamp(t["ts"], tz=timezone.utc)
+            include = False
+            if period == "daily":
+                include = (dt.date() == now.date())
+            elif period == "weekly":
+                # ISO week number
+                include = (dt.isocalendar()[:2] == now.isocalendar()[:2])
+            elif period == "monthly":
+                include = (dt.year == now.year and dt.month == now.month)
+            if include:
+                result.append(t)
+        return result
+
+    def get_period_stats(self, period: str) -> Dict:
+        """Daily/weekly/monthly stats using net PnL after fees if available."""
+        trades = self._filter_period(period)
+        total_pnl = sum(t["pnl"] for t in trades)
+        winners = [t for t in trades if t["pnl"] > 0]
+        losers = [t for t in trades if t["pnl"] < 0]
+        total = len(trades)
+        return {
+            "period": period,
+            "total_closed_trades": total,
+            "winning_trades": len(winners),
+            "losing_trades": len(losers),
+            "win_rate": (len(winners) / total * 100) if total else 0,
+            "total_pnl": total_pnl,
+            "avg_win": (sum(t["pnl"] for t in winners) / len(winners)) if winners else 0,
+            "avg_loss": (sum(t["pnl"] for t in losers) / len(losers)) if losers else 0,
         }
     
     def print_balance_sheet(self, current_equity: float, unrealized_pnl: float = 0, position: Dict = None):

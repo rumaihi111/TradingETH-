@@ -11,7 +11,7 @@ from .exchange_paper import PaperExchange
 from .history_store import HistoryStore
 from .trade_logger import TradeLogger
 from .pnl_tracker import PnLTracker
-from .risk import FrequencyGuard, clamp_decision
+from .risk import FrequencyGuard, clamp_decision, RiskManager
 from .telegram_bot import TradingTelegramBot, schedule_daily_reports
 
 
@@ -53,13 +53,14 @@ async def run_live_async():
         print("🤖 Telegram bot enabled")
     
     guard = FrequencyGuard(settings.max_trades_per_hour, settings.cooldown_minutes)
+    risk_manager = RiskManager()
     spot = ccxt.kucoin()
     rate_limit_backoff = 60  # Start with 60 second backoff on rate limit
 
     while True:
         try:
-            # Fetch latest 5m candles for Claude analysis
-            ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=50)
+            # Fetch latest candles per settings (ETH only, 5m timeframe, 350 limit)
+            ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe=settings.timeframe, limit=settings.candle_limit)
             candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
             price = candles[-1]["close"]
             
@@ -114,6 +115,28 @@ async def run_live_async():
         current_position = open_positions[0] if open_positions else None
         pnl.print_balance_sheet(equity, unrealized_pnl, current_position)
         
+        # Respect pause/shutdown windows
+        if risk_manager.is_shutdown():
+            print("🛑 Bot in shutdown window; sleeping 10 minutes")
+            await asyncio.sleep(600)
+            continue
+        if risk_manager.is_paused():
+            print("⏸️ Bot paused; sleeping 10 minutes")
+            await asyncio.sleep(600)
+            continue
+
+        # Volatility filter: skip during extreme spikes unless explicitly desired
+        prev_close = candles[-2]["close"] if len(candles) >= 2 else price
+        spike_pct = abs(price - prev_close) / prev_close if prev_close > 0 else 0
+        if spike_pct >= settings.volatility_threshold_pct:
+            print(f"⚠️ Volatility spike {spike_pct*100:.2f}% ≥ {settings.volatility_threshold_pct*100:.2f}% — skipping this cycle")
+            if telegram_bot:
+                await telegram_bot.send_message(
+                    f"⚠️ Volatility filter: Skipping trade (5m move {spike_pct*100:.2f}%)"
+                )
+            await asyncio.sleep(300)
+            continue
+
         # Check if we should query Claude (respect cooldown)
         if not guard.allow_new_trade():
             print(f"⏸️  Cooldown active, waiting...")
@@ -146,7 +169,14 @@ async def run_live_async():
                 
                 # Record P&L
                 if "pnl" in close_result:
-                    pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, close_result["pnl"])
+                    pnl_value = close_result["pnl"]
+                    pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, pnl_value)
+                    # Update risk manager streak/daily PnL
+                    rm_update = risk_manager.on_trade_closed(
+                        pnl_value,
+                        settings.pause_consecutive_losses,
+                        settings.pause_duration_hours * 3600,
+                    )
                     # Send Telegram notification
                     if telegram_bot:
                         await telegram_bot.notify_trade_closed(
@@ -154,8 +184,13 @@ async def run_live_async():
                             abs(current_pos.get("size", 0)),
                             current_pos.get("entry", 0),
                             close_price,
-                            close_result["pnl"]
+                            pnl_value
                         )
+                        if rm_update["triggered_pause"]:
+                            await telegram_bot.notify_paused(
+                                reason=f"{rm_update['consecutive_losses']} losses in a row",
+                                hours=settings.pause_duration_hours,
+                            )
                 
                 trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
                 print(f"Signal: flat → Position closed @ {close_price}, result={close_result}")
@@ -204,6 +239,11 @@ async def run_live_async():
                     pnl_value = (entry - close_price) * size
             
             pnl.record_trade("close", abs(current_pos.get("size", 0)), current_pos.get("entry", 0), close_price, pnl_value)
+            rm_update = risk_manager.on_trade_closed(
+                pnl_value,
+                settings.pause_consecutive_losses,
+                settings.pause_duration_hours * 3600,
+            )
             
             # Send Telegram notification
             if telegram_bot:
@@ -214,6 +254,11 @@ async def run_live_async():
                     close_price,
                     pnl_value
                 )
+                if rm_update["triggered_pause"]:
+                    await telegram_bot.notify_paused(
+                        reason=f"{rm_update['consecutive_losses']} losses in a row",
+                        hours=settings.pause_duration_hours,
+                    )
             
             trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price, "pnl": pnl_value})
             print(f"Signal: {trade.side} → Closed {current_side} position @ ${close_price:.2f} (P&L: ${pnl_value:+.2f})")
@@ -263,7 +308,24 @@ async def run_live_async():
         
         # Send Telegram notification for opened trade
         if telegram_bot:
-            await telegram_bot.notify_trade_opened(trade.side, size, price)
+            # Leverage: attempt to read from position after verification; fallback 10x
+            lev = None
+            try:
+                poslist = ex.positions()
+                if poslist:
+                    lev = poslist[0].get("leverage") or None
+            except Exception:
+                lev = None
+            why_summary = "5m price-action entry; invalidation at SL"
+            await telegram_bot.notify_trade_opened(
+                trade.side,
+                size,
+                price,
+                sl_pct=trade.stop_loss_pct,
+                tp_pct=trade.take_profit_pct,
+                leverage=lev if lev else 10.0,
+                why=why_summary,
+            )
         
         trade_log.log_trade({"decision": trade.model_dump(), "result": result, "price": price})
         guard.record_open()
@@ -316,6 +378,31 @@ async def run_live_async():
                 print(f"🎯 Take Profit: {tp_side.upper()} {actual_size:.4f} ETH @ ${tp_price:.2f} (+{trade.take_profit_pct*100:.1f}% from ${entry_price:.2f})")
             
             print(f"✅ Risk management orders placed successfully\n")
+
+        # After any close, check daily loss vs limit and trigger shutdown if exceeded
+        day_pnl = risk_manager.get_day_pnl()
+        # Use starting equity from pnl tracker as baseline for simplicity
+        start_eq = pnl.get_stats().get("starting_equity", 0)
+        if start_eq > 0 and day_pnl <= -settings.daily_loss_limit_pct * start_eq:
+            print(f"🛑 Max daily loss reached ({day_pnl/start_eq*100:.2f}%), initiating shutdown and closing positions")
+            # Close any open position
+            open_positions = ex.positions()
+            if open_positions:
+                market_price = price
+                if use_paper:
+                    ex.close_position(settings.trading_pair, price=market_price)
+                else:
+                    ex.close_position(settings.trading_pair)
+            # Set shutdown window and notify
+            risk_manager.shutdown_for(settings.shutdown_duration_hours * 3600)
+            if telegram_bot:
+                await telegram_bot.notify_shutdown(
+                    reason=f"Daily loss exceeded {settings.daily_loss_limit_pct*100:.1f}%",
+                    hours=settings.shutdown_duration_hours,
+                )
+            # Sleep longer during shutdown
+            await asyncio.sleep(600)
+            continue
 
         # Wait cooldown before next signal
         await asyncio.sleep(settings.cooldown_minutes * 60)

@@ -45,3 +45,24 @@ export PAPER_INITIAL_EQUITY=10000
 - Hyperliquid client now uses the official SDK; sizing/price feed still TODO.
 - AI prompt/response parsing is minimal; return JSON with side/size/stop/tp/slippage.
 - Cooldown and sizing caps are enforced in `risk.py`.
+
+## Trading Rules & Alerts
+- Asset: ETH only, timeframe: 5m, analysis window: 350 candles.
+- No indicators: decisions are based on price action and patterns.
+- Volatility filter: skip trading when the most recent 5m close-to-close move exceeds `VOLATILITY_THRESHOLD_PCT` (default 2%).
+- Max daily loss: 6% of starting equity (net closed PnL) triggers immediate position close, shutdown for 24h, Telegram alert.
+- Loss streak pause: after 3 consecutive losing closes, pause trading for 24h and alert on Telegram.
+- Telegram alerts include: signal timestamp (UTC + local), direction, entry, SL/TP%, leverage (assumed 10x Cross), and a brief "why" summary.
+
+## Stats Definitions
+- Basis: net PnL after fees when available from exchange responses; paper mode excludes fees.
+- Win/Loss: a closed trade with `pnl > 0` is a win; partial closes count according to net for that close.
+- Periods: daily (UTC day), weekly (ISO week), monthly (calendar month) computed on closed trades.
+- Reported metrics: total closed trades, winners/losers, win rate, total PnL, average win/loss.
+
+### Config (env vars)
+- `TIMEFRAME` (default `5m`), `CANDLE_LIMIT` (default `350`)
+- `DAILY_LOSS_LIMIT_PCT` (default `0.06`)
+- `PAUSE_CONSECUTIVE_LOSSES` (default `3`), `PAUSE_DURATION_HOURS` (default `24`)
+- `SHUTDOWN_DURATION_HOURS` (default `24`)
+- `VOLATILITY_THRESHOLD_PCT` (default `0.02`)

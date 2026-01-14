@@ -72,6 +72,8 @@ class AISignalClient:
     def fetch_signal(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("ANTHROPIC_API_KEY missing")
+        # Use only the last 350 candles for analysis and charting
+        candles = candles[-350:] if len(candles) > 350 else candles
         recent_decisions = []
         if self.history_store:
             recent_decisions = self.history_store.recent_decisions(hours=self.history_hours)
