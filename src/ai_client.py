@@ -75,12 +75,7 @@ class AISignalClient:
             print(f"   Falling back to text-based analysis")
             return None
 
-    def fetch_signal(
-        self,
-        candles: List[Dict[str, Any]],
-        current_position: Optional[Dict[str, Any]] = None,
-        chart_image_b64: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    def fetch_signal(self, candles: List[Dict[str, Any]], current_position: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("ANTHROPIC_API_KEY missing")
         # Use only the last 350 candles for analysis and charting
@@ -158,8 +153,8 @@ Example: {"side": "long", "position_fraction": 0.8, "stop_loss_pct": 0.04, "take
 
 CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown."""
 
-        # Generate chart image from candle data for visual analysis unless a screenshot is provided
-        chart_image = chart_image_b64 or self._get_chart_image(candles)
+        # Generate chart image from candle data for visual analysis
+        chart_image = self._get_chart_image(candles)
         
         # Build user message with image + text prompt
         user_content = []
@@ -229,7 +224,7 @@ Return your trading decision as JSON:"""
         venice_side: Optional[str] = None
         venice_reason: Optional[str] = None
         venice_pattern: Optional[str] = None
-        if current_position is None:
+        if current_position is None and self.venice_api_key:
             venice_decision = self._get_direction_with_venice(candles, chart_image, fractal_analysis)
             if venice_decision and venice_decision.get("side"):
                 venice_side = venice_decision.get("side")
@@ -310,40 +305,42 @@ Return your trading decision as JSON:"""
 
     def _format_candles(self, candles: List[Dict[str, Any]]) -> str:
         """Format candles for display in prompt"""
-        def _get_direction_with_venice(
-            self,
-            candles: List[Dict[str, Any]],
-            chart_image_b64: Optional[str],
-            fractal_analysis: Dict[str, Any],
-        ) -> Optional[Dict[str, Any]]:
-            """Call Venice Mistral model to determine direction and rationale.
-            Returns dict: {side: 'long'|'short'|'flat', reason: str, pattern: str} or None on error.
-            """
+        if not candles:
+            return "No candle data available"
+        
+        # Show last 20 candles
+        recent = candles[-20:] if len(candles) > 20 else candles
+        lines = ["Time          Open      High      Low       Close     Volume"]
+        lines.append("-" * 70)
+        
+        for c in recent:
+            timestamp = c.get('time', 'Unknown')
             open_price = c.get('open', 0)
-                return None
+            high = c.get('high', 0)
             low = c.get('low', 0)
-                system = (
-                    "You are a stateless trading direction decider with vision. Analyze the provided ETH/USDC 5m chart image."
-                    " Return a JSON object ONLY with fields: side ('long'|'short'|'flat'), pattern (string), reason (concise rationale)."
-                    " Base decision solely on the attached image and text."
-                )
+            close = c.get('close', 0)
+            volume = c.get('volume', 0)
+            
             lines.append(f"{timestamp:<12}  ${open_price:<8.2f} ${high:<8.2f} ${low:<8.2f} ${close:<8.2f} {volume:<10.2f}")
         
         return "\n".join(lines)
 
     def _get_direction_with_venice(
         self,
+        candles: List[Dict[str, Any]],
         chart_image_b64: Optional[str],
-        recent_decisions: List[Dict[str, Any]],
         fractal_analysis: Dict[str, Any],
-                        "Text context (if image missing):\n" + self._format_candles(candles) +
-                        "\n\nNested Fractal Brain:\n" + self._format_fractal_analysis(fractal_analysis) +
-                        "\n\nReturn JSON only, e.g.: {\"side\": \"long\", \"pattern\": \"falling wedge\", \"reason\": \"breakout above resistance with volume\"}"
+    ) -> Optional[Dict[str, Any]]:
+        """Call Venice Mistral model to determine direction and rationale.
+        Returns dict: {side: 'long'|'short'|'flat', reason: str, pattern: str} or None on error.
+        """
         if not self.venice_api_key:
             return None
         try:
             system = (
-                "You are a trading direction decider. Analyze ETH/USDC 5m context and return ONLY one token: LONG, SHORT, or FLAT. Consider nested fractal brain summary when available."
+                "You are a stateless trading direction decider with vision. Analyze the provided ETH/USDC 5m chart image."
+                " Return a JSON object ONLY with fields: side ('long'|'short'|'flat'), pattern (string), reason (concise rationale)."
+                " Base decision solely on the attached image and text."
             )
             user_parts: List[Dict[str, Any]] = []
             if chart_image_b64:
@@ -354,10 +351,9 @@ Return your trading decision as JSON:"""
             user_parts.append({
                 "type": "text",
                 "text": (
-                    "Recent candles (last 20):\n" + self._format_candles(candles) +
+                    "Text context (if image missing):\n" + self._format_candles(candles) +
                     "\n\nNested Fractal Brain:\n" + self._format_fractal_analysis(fractal_analysis) +
-                    "\n\nRecent decisions:\n" + self._format_recent_decisions(recent_decisions) +
-                text = None
+                    "\n\nReturn JSON only, e.g.: {\"side\": \"long\", \"pattern\": \"falling wedge\", \"reason\": \"breakout above resistance with volume\"}"
                 ),
             })
             payload = {
@@ -366,59 +362,59 @@ Return your trading decision as JSON:"""
                     {"role": "system", "content": system},
                     {"role": "user", "content": user_parts},
                 ],
-                    return None
-                # Try to parse JSON object
-                import json as _json
-                decision_obj = None
+                "temperature": 0.1,
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.venice_api_key}",
+            }
+            with httpx.Client(timeout=15) as client:
+                resp = client.post(self.venice_endpoint, headers=headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+            text = None
+            if isinstance(data, dict) and "choices" in data:
                 try:
-                    start = text.find("{")
-                    end = text.rfind("}") + 1
-                    if start != -1 and end > start:
-                        decision_obj = _json.loads(text[start:end])
+                    text = data["choices"][0]["message"]["content"]
                 except Exception:
-                    decision_obj = None
-                if not decision_obj:
-                    # Fallback: extract tokens from text
-                    normalized = text.strip().upper()
-                    if "LONG" in normalized and "SHORT" in normalized:
-                        side_token = "long" if normalized.index("LONG") < normalized.index("SHORT") else "short"
-                    elif "LONG" in normalized:
-                        side_token = "long"
-                    elif "SHORT" in normalized:
-                        side_token = "short"
-                    elif "FLAT" in normalized or "NEUTRAL" in normalized:
-                        side_token = "flat"
-                    else:
-                        side_token = None
-                    decision_obj = {"side": side_token, "pattern": None, "reason": text.strip()} if side_token else None
-                # Normalize side
-                side = (decision_obj.get("side") or "").lower() if decision_obj else None
-                if side not in {"long", "short", "flat"}:
-                    return None
-                return {
-                    "side": side,
-                    "pattern": decision_obj.get("pattern"),
-                    "reason": decision_obj.get("reason"),
-                }
+                    text = None
             if not text and isinstance(data, dict) and "content" in data:
                 text = data.get("content")
             if not text:
                 return None
-            normalized = text.strip().upper()
-            if "LONG" in normalized and "SHORT" in normalized:
-                if normalized.index("LONG") < normalized.index("SHORT"):
-                    token = "LONG"
+            # Try to parse JSON object
+            import json as _json
+            decision_obj = None
+            try:
+                start = text.find("{")
+                end = text.rfind("}") + 1
+                if start != -1 and end > start:
+                    decision_obj = _json.loads(text[start:end])
+            except Exception:
+                decision_obj = None
+            if not decision_obj:
+                # Fallback: extract tokens from text
+                normalized = text.strip().upper()
+                if "LONG" in normalized and "SHORT" in normalized:
+                    side_token = "long" if normalized.index("LONG") < normalized.index("SHORT") else "short"
+                elif "LONG" in normalized:
+                    side_token = "long"
+                elif "SHORT" in normalized:
+                    side_token = "short"
+                elif "FLAT" in normalized or "NEUTRAL" in normalized:
+                    side_token = "flat"
                 else:
-                    token = "SHORT"
-            elif "LONG" in normalized:
-                token = "LONG"
-            elif "SHORT" in normalized:
-                token = "SHORT"
-            elif "FLAT" in normalized or "NEUTRAL" in normalized:
-                token = "FLAT"
-            else:
-                token = None
-            return token.lower() if token else None
+                    side_token = None
+                decision_obj = {"side": side_token, "pattern": None, "reason": text.strip()} if side_token else None
+            # Normalize side
+            side = (decision_obj.get("side") or "").lower() if decision_obj else None
+            if side not in {"long", "short", "flat"}:
+                return None
+            return {
+                "side": side,
+                "pattern": decision_obj.get("pattern"),
+                "reason": decision_obj.get("reason"),
+            }
         except Exception as e:
             print(f"⚠️ Venice direction fetch failed: {e}")
             return None
