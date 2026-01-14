@@ -121,11 +121,8 @@ async def run_live_async():
                 pnl_pct = ((price - entry_price) / entry_price) * (1 if pos_size > 0 else -1)
                 
                 # Check stored SL/TP from last decision
-                if self.history_store:
-                    recent_decisions = self.history_store.recent_decisions(hours=3)
-                    last_decision = recent_decisions[-1].get('decision', {}) if recent_decisions else {}
-                else:
-                    last_decision = {}
+                recent_decisions = history.recent_decisions(hours=3)
+                last_decision = recent_decisions[-1].get('decision', {}) if recent_decisions else {}
                 sl_pct = last_decision.get('stop_loss_pct', 0)
                 tp_pct = last_decision.get('take_profit_pct', 0)
                 
