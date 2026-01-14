@@ -400,47 +400,55 @@ Example: {"side": "long", "pattern": "falling wedge breakout", "reason": "Price 
 
 CRITICAL: Return ONLY the JSON object. No markdown, no explanations, no code blocks."""
 
-            user_parts: List[Dict[str, Any]] = []
-            if chart_image_b64:
-                user_parts.append({
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": "image/png", "data": chart_image_b64},
-                })
-            
-            # Add context text
-            text_content = f"""Analyze this ETH/USDC 5-minute chart image and determine trade direction.
+            # Venice uses standard OpenAI format with image_url
+            text_content = f"""Analyze this ETH/USDC 5-minute chart and determine trade direction.
 
 🧠 NESTED FRACTAL BRAIN ANALYSIS:
 {self._format_fractal_analysis(fractal_analysis)}
 
-📊 VISUAL ANALYSIS REQUIRED:
-- Identify chart patterns in the image (triangles, flags, channels, etc.)
-- Locate support/resistance levels visually
-- Observe candlestick patterns and formations
+📊 CANDLE DATA (last 20):
+{self._format_candles(candles[-20:])}
+
+VISUAL ANALYSIS REQUIRED:
+- Identify chart patterns: triangles, flags, channels, wedges
+- Locate support/resistance levels
+- Observe candlestick patterns: engulfing, doji, hammers
 - Check trend direction and momentum
 - Look for volume confirmation
 
-Based on your visual pattern recognition and fractal brain insights, decide: long, short, or flat.
-Return JSON only."""
+Based on pattern recognition and fractal brain, decide: long, short, or flat.
+Return JSON only: {{"side": "long", "pattern": "falling wedge", "reason": "breakout with volume"}}"""
             
-            user_parts.append({"type": "text", "text": text_content})
+            user_content = []
+            if chart_image_b64:
+                # Try OpenAI vision format for Venice
+                user_content = [
+                    {"type": "text", "text": text_content},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{chart_image_b64}"}}
+                ]
+            else:
+                user_content = text_content
             
             payload = {
                 "model": self.venice_model,
                 "messages": [
                     {"role": "system", "content": system},
-                    {"role": "user", "content": user_parts},
+                    {"role": "user", "content": user_content},
                 ],
                 "temperature": 0.1,
+                "max_tokens": 200,
             }
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.venice_api_key}",
             }
-            with httpx.Client(timeout=15) as client:
+            
+            print(f"🔍 Venice API call starting... (timeout: 20s)")
+            with httpx.Client(timeout=20) as client:
                 resp = client.post(self.venice_endpoint, headers=headers, json=payload)
                 resp.raise_for_status()
                 data = resp.json()
+            print(f"✅ Venice API responded")
             text = None
             if isinstance(data, dict) and "choices" in data:
                 try:
