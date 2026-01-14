@@ -144,7 +144,8 @@ async def run_live_async():
             continue
 
         # Check if we should query AI (respect cooldown)
-        if not guard.allow_new_trade():
+        # If in a position, allow monitoring every cycle; if flat, respect cooldown
+        if not current_position and not guard.allow_new_trade():
             print(f"⏸️  Cooldown active, waiting...")
             await asyncio.sleep(60)  # Check again in 1 minute
             continue
@@ -414,8 +415,19 @@ async def run_live_async():
             await asyncio.sleep(600)
             continue
 
-        # Wait cooldown before next signal
-        await asyncio.sleep(settings.cooldown_minutes * 60)
+        # Dynamic wait: 5 min scan when flat & cooldown passed, 30 min after opening trade
+        if current_position:
+            # Monitoring mode: check every 5 minutes
+            print(f"📊 Next check in 5 minutes (monitoring position)")
+            await asyncio.sleep(300)
+        elif guard.allow_new_trade():
+            # No position and cooldown passed: scan every 5 minutes
+            print(f"🔍 Next scan in 5 minutes (no position, seeking entry)")
+            await asyncio.sleep(300)
+        else:
+            # Just opened a trade: wait full cooldown
+            print(f"⏸️ Next scan in {settings.cooldown_minutes} minutes (post-trade cooldown)")
+            await asyncio.sleep(settings.cooldown_minutes * 60)
 
 
 def run_live():
