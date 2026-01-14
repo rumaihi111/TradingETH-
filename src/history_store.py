@@ -60,3 +60,20 @@ class HistoryStore:
         entry = {"ts": time.time(), "decision": decision}
         with open(self.path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
+    
+    def clear_history(self) -> None:
+        """Clear all decision history. Called when a trade is closed to ensure fresh start."""
+        archive_path = f"{self.path}.archive"
+        # Archive existing history before clearing
+        if os.path.exists(self.path):
+            entries = self._read_entries()
+            if entries:
+                try:
+                    with open(archive_path, "a", encoding="utf-8") as fh:
+                        for entry in entries:
+                            fh.write(json.dumps(entry) + "\n")
+                except OSError:
+                    pass
+        # Clear current history file
+        self._write_entries([])
+        print("🧹 AI memory cleared - fresh start for next trade")

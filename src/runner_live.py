@@ -170,6 +170,10 @@ async def run_live_async():
                         )
                     trade_log.log_trade({"decision": {"side": "close", "reason": reason}, "result": close_result, "price": price})
                     guard.record_close()
+                    
+                    # Clear AI history for fresh start on next trade
+                    history.clear_history()
+                    
                     await asyncio.sleep(300)
                     continue
         
@@ -261,6 +265,9 @@ async def run_live_async():
                 print(f"Signal: flat → Position closed @ {close_price}, result={close_result}")
                 guard.record_close()
                 
+                # Clear AI history for fresh start on next trade
+                history.clear_history()
+                
                 # Notify going neutral
                 if telegram_bot:
                     await telegram_bot.notify_neutral()
@@ -328,6 +335,10 @@ async def run_live_async():
             trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price, "pnl": pnl_value})
             print(f"Signal: {trade.side} → Closed {current_side} position @ ${close_price:.2f} (P&L: ${pnl_value:+.2f})")
             guard.record_close()
+            
+            # Clear AI history for fresh start on next trade
+            history.clear_history()
+            
             await asyncio.sleep(5)
 
         # Open new position - Use 100% of equity as margin, then apply 10x leverage
@@ -464,6 +475,8 @@ async def run_live_async():
                     ex.close_position(settings.trading_pair, price=market_price)
                 else:
                     ex.close_position(settings.trading_pair)
+                # Clear AI history after emergency close
+                history.clear_history()
             # Set shutdown window and notify
             risk_manager.shutdown_for(settings.shutdown_duration_hours * 3600)
             if telegram_bot:
