@@ -330,13 +330,16 @@ async def run_live_async():
             guard.record_close()
             await asyncio.sleep(5)
 
-        # Open new position - ALWAYS use max position fraction (100% of available margin)
-        notional_value = equity * settings.max_position_fraction  # Use full wallet for margin
+        # Open new position - Use 100% of equity as margin, then apply 10x leverage
+        margin = equity * settings.max_position_fraction  # Margin = money at risk
+        leverage = 10.0  # 10x leverage
+        notional_value = margin * leverage  # Actual position value with leverage
         
         print(f"🔧 DEBUG: settings.max_position_fraction = {settings.max_position_fraction}")
         print(f"🔧 DEBUG: equity = ${equity:.2f}")
-        print(f"🔧 DEBUG: notional_value (margin) = ${notional_value:.2f}")
-        print(f"🔧 DEBUG: With 5x leverage → ${notional_value * 5:.2f} position")
+        print(f"🔧 DEBUG: margin (money in) = ${margin:.2f}")
+        print(f"🔧 DEBUG: leverage = {leverage}x")
+        print(f"🔧 DEBUG: notional position value = ${notional_value:.2f}")
         print(f"🔧 DEBUG: Claude's position_fraction (IGNORED) = {trade.position_fraction}")
         
         # Hyperliquid requires minimum $10 order value, use $11 to be safe
@@ -344,9 +347,9 @@ async def run_live_async():
             print(f"⚠️ Position size ${notional_value:.2f} below minimum ($11), increasing to $11")
             notional_value = 11
         
-        size = notional_value / price  # Convert to ETH amount
+        size = notional_value / price  # Convert notional value to ETH amount
         
-        print(f"💰 Position sizing: ${notional_value:.2f} ({settings.max_position_fraction*100:.0f}% of ${equity:.2f})")
+        print(f"💰 Position: ${margin:.2f} margin × {leverage}x = ${notional_value:.2f} notional ({size:.4f} ETH @ ${price:.2f})")
         
         if use_paper:
             result = ex.place_market(settings.trading_pair, trade.side, size, trade.max_slippage_pct, price=price)
