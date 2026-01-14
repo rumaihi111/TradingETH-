@@ -333,12 +333,13 @@ async def run_live_async():
             guard.record_close()
             await asyncio.sleep(5)
 
-        # Open new position - ALWAYS use max position fraction (ignore Claude's position_fraction)
-        notional_value = equity * settings.max_position_fraction  # Always use 80% of wallet
+        # Open new position - ALWAYS use max position fraction (100% of available margin)
+        notional_value = equity * settings.max_position_fraction  # Use full wallet for margin
         
         print(f"🔧 DEBUG: settings.max_position_fraction = {settings.max_position_fraction}")
         print(f"🔧 DEBUG: equity = ${equity:.2f}")
-        print(f"🔧 DEBUG: notional_value = ${notional_value:.2f}")
+        print(f"🔧 DEBUG: notional_value (margin) = ${notional_value:.2f}")
+        print(f"🔧 DEBUG: With 5x leverage → ${notional_value * 5:.2f} position")
         print(f"🔧 DEBUG: Claude's position_fraction (IGNORED) = {trade.position_fraction}")
         
         # Hyperliquid requires minimum $10 order value, use $11 to be safe
