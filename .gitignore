@@ -44,3 +44,6 @@ bot.log
 # OS
 .DS_Store
 Thumbs.db
+.env
+trading_bot.pid
+trading_bot.log
