@@ -38,7 +38,7 @@ class Settings(BaseModel):
     require_volatility_expansion: bool = Field(True, alias="REQUIRE_VOLATILITY_EXPANSION")
     
     # Time filter settings
-    enable_time_filter: bool = Field(True, alias="ENABLE_TIME_FILTER")
+    enable_time_filter: bool = Field(False, alias="ENABLE_TIME_FILTER")  # Disabled for 24/7 trading
     timezone: str = Field("America/New_York", alias="TIMEZONE")
     
     # Session context settings

@@ -34,7 +34,7 @@ class AISignalClient:
         atr_compression_threshold: float = 0.75,
         require_volatility_expansion: bool = True,
         # Time filter settings
-        enable_time_filter: bool = True,
+        enable_time_filter: bool = False,  # Disabled for 24/7 trading
         timezone: str = "America/New_York",
         # Session context settings
         enable_session_context: bool = True,
@@ -154,7 +154,7 @@ class AISignalClient:
         print("🔍 PRE-TRADE FILTERS & ANALYSIS")
         print("="*80)
         
-        # 1️⃣ TIME-OF-DAY FILTER (MANDATORY)
+        # 1️⃣ TIME-OF-DAY FILTER (DISABLED - Trading 24/7)
         if self.enable_time_filter:
             print("\n⏰ TIME FILTER:")
             time_check = self.time_filter.can_trade()
@@ -171,6 +171,8 @@ class AISignalClient:
                     "reason": f"TIME FILTER: {time_check['reason']}"
                 }
             print(f"   ✅ {time_check['reason']}")
+        else:
+            print("\n⏰ TIME FILTER: DISABLED - Trading 24/7")
         
         # 2️⃣ VOLATILITY GATE (MANDATORY ON 5m)
         if self.enable_volatility_gate:
