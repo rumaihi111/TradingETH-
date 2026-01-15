@@ -218,7 +218,54 @@ class AISignalClient:
                 }
             print(f"   ✅ Bias allows trading")
         
-        # 4️⃣ SESSION CONTEXT AWARENESS
+        # 4️⃣ NESTED FRACTAL DETECTION (MANDATORY - 15m chart)
+        print("\n🧠 FRACTAL BRAIN: Analyzing 15m chart for nested fractal patterns...")
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Fractal brain analysis timed out")
+        
+        # Set 5 second timeout for fractal analysis
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(5)
+        
+        # Analyze 15m chart for nested fractals (use 15m candles if available, else 5m)
+        fractal_candles = candles_15m if candles_15m else candles
+        try:
+            fractal_analysis = self.fractal_brain.analyze(fractal_candles)
+            signal.alarm(0)  # Cancel alarm
+            
+            if fractal_analysis['fractals_found']:
+                print(f"✅ Found {fractal_analysis['pattern_count']} nested fractal pattern(s)!")
+                for i, pattern in enumerate(fractal_analysis['patterns'], 1):
+                    print(f"   Pattern {i}: {pattern['shape']} (similarity: {pattern['similarity']:.2%}, scale: {pattern['scale_ratio']:.1f}x)")
+                print(f"   ✅ Fractal filter PASSED - trading allowed")
+            else:
+                print(f"   ❌ {fractal_analysis['reason']}")
+                print(f"   ❌ NO NESTED FRACTALS - NO TRADES")
+                print("="*80 + "\n")
+                return {
+                    "side": "flat",
+                    "position_fraction": 0.0,
+                    "stop_loss_pct": 0.0,
+                    "take_profit_pct": 0.0,
+                    "max_slippage_pct": 0.0,
+                    "reason": f"FRACTAL FILTER: {fractal_analysis['reason']}"
+                }
+        except TimeoutError:
+            signal.alarm(0)
+            print("   ❌ Fractal brain timeout (>5s) - NO TRADES")
+            print("="*80 + "\n")
+            return {
+                "side": "flat",
+                "position_fraction": 0.0,
+                "stop_loss_pct": 0.0,
+                "take_profit_pct": 0.0,
+                "max_slippage_pct": 0.0,
+                "reason": "FRACTAL FILTER: Analysis timed out"
+            }
+        
+        # 5️⃣ SESSION CONTEXT AWARENESS
         session_info = None
         if self.enable_session_context:
             print("\n📊 SESSION CONTEXT:")
@@ -231,36 +278,6 @@ class AISignalClient:
                 print(f"   Near Extreme: {session_info['near_extreme']} ({session_info['extreme_type']})")
             else:
                 print(f"   ⚠️ Insufficient session data")
-        
-        # HIVE MIND: Consult Nested Fractal Brain (with timeout to prevent blocking)
-        print("\n🧠 FRACTAL BRAIN: Analyzing for nested fractal patterns...")
-        import signal
-        
-        def timeout_handler(signum, frame):
-            raise TimeoutError("Fractal brain analysis timed out")
-        
-        # Set 5 second timeout for fractal analysis
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(5)
-        
-        try:
-            fractal_analysis = self.fractal_brain.analyze(candles)
-            signal.alarm(0)  # Cancel alarm
-            
-            if fractal_analysis['fractals_found']:
-                print(f"✅ Found {fractal_analysis['pattern_count']} nested fractal pattern(s)!")
-                for i, pattern in enumerate(fractal_analysis['patterns'], 1):
-                    print(f"   Pattern {i}: {pattern['shape']} (similarity: {pattern['similarity']:.2%}, scale: {pattern['scale_ratio']:.1f}x)")
-            else:
-                print(f"⚠️ {fractal_analysis['reason']}")
-        except TimeoutError:
-            signal.alarm(0)
-            print("⚠️ Fractal brain timeout - skipping nested fractal analysis")
-            fractal_analysis = {
-                "fractals_found": False,
-                "reason": "Analysis timed out (>5s)",
-                "patterns": []
-            }
         
         print("="*80 + "\n")
         
@@ -358,11 +375,12 @@ CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown.""
 {self._format_recent_decisions(recent_decisions)}
 
 IMPORTANT CONTEXT:
-- All mandatory filters have PASSED (time-of-day, volatility, multi-timeframe alignment)
+- All mandatory filters have PASSED (volatility, multi-timeframe alignment, nested fractals)
+- NESTED FRACTALS CONFIRMED on 15m chart - this is a high-probability setup
 - Your decision will be validated against session context and MTF alignment
-- Only trade nested fractals when volatility is expanding
 - Respect the 15m bias direction (you will be overridden if misaligned)
 - Consider session position (middle = garbage, extremes = quality setups)
+- The fractal patterns give this setup an edge - factor them into your decision
 
 Based on your visual chart analysis + filter context:
 - Set appropriate stop loss (3-8% from entry recommended)
@@ -388,11 +406,12 @@ Return your trading decision as JSON:"""
 {self._format_recent_decisions(recent_decisions)}
 
 IMPORTANT CONTEXT:
-- All mandatory filters have PASSED (time-of-day, volatility, multi-timeframe alignment)
+- All mandatory filters have PASSED (volatility, multi-timeframe alignment, nested fractals)
+- NESTED FRACTALS CONFIRMED on 15m chart - this is a high-probability setup
 - Your decision will be validated against session context and MTF alignment
-- Only trade nested fractals when volatility is expanding
 - Respect the 15m bias direction (you will be overridden if misaligned)
 - Consider session position (middle = garbage, extremes = quality setups)
+- The fractal patterns give this setup an edge - factor them into your decision
 
 Based on this 5-minute chart analysis + filter context:
 - Identify trends, support/resistance levels
@@ -608,12 +627,13 @@ TRADING PHILOSOPHY (YOUR PRIMARY MISSION):
 - Observe volume patterns and price action momentum.
 - Trust your pattern recognition instincts - you see what others miss.
 
-HIVE MIND - NESTED FRACTAL BRAIN:
-- Work alongside the Nested Fractal Brain that detects unique patterns repeating at different scales.
-- Nested Fractals = SAME unique shape appearing at 2+ different scales within the same session.
-- NOT normal trading patterns - look for weird shapes: staircases, mountains, words, zigzags.
-- When fractals are detected, consider their implications for trend continuation/reversal.
-- Fractal signal: If large pattern completed bullish, small pattern may follow same path.
+HIVE MIND - NESTED FRACTAL BRAIN (MANDATORY):
+- ALL TRADES REQUIRE nested fractals detected on 15-minute chart
+- Nested Fractals = SAME unique shape appearing at 2+ different scales within the same session
+- NOT normal trading patterns - look for weird shapes: staircases, mountains, words, zigzags
+- If no fractals found, bot won't call you - you'll only see setups with confirmed fractals
+- Fractal signal: If large pattern completed bullish, small pattern may follow same path
+- Trust the fractal patterns - they've already been validated before you see the chart
 
 YOUR DECISION OUTPUT:
 Return ONLY a JSON object with these fields:
