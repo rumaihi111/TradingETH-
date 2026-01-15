@@ -1,0 +1,84 @@
+#!/bin/bash
+# Quick Bot Control Script
+
+case "$1" in
+    start)
+        echo "▶️  Starting bot..."
+        sudo systemctl start tradingbot
+        sleep 2
+        sudo systemctl status tradingbot --no-pager
+        ;;
+    stop)
+        echo "⏹️  Stopping bot..."
+        sudo systemctl stop tradingbot
+        echo "✅ Bot stopped"
+        ;;
+    restart)
+        echo "🔄 Restarting bot..."
+        sudo systemctl restart tradingbot
+        sleep 2
+        sudo systemctl status tradingbot --no-pager
+        ;;
+    status)
+        sudo systemctl status tradingbot --no-pager
+        ;;
+    logs)
+        echo "📋 Live logs (Ctrl+C to exit)..."
+        sudo journalctl -u tradingbot -f
+        ;;
+    errors)
+        echo "❌ Recent errors:"
+        sudo journalctl -u tradingbot -n 50 --no-pager | grep -i error || echo "No errors found"
+        ;;
+    trades)
+        echo "💰 Recent trades:"
+        if [ -f "data/trades.jsonl" ]; then
+            tail -10 data/trades.jsonl | jq -r '.decision.side + " @ $" + (.price|tostring) + " | " + .result.status'
+        else
+            echo "No trades file found"
+        fi
+        ;;
+    position)
+        echo "📊 Checking current position..."
+        source .venv/bin/activate
+        python scripts/check_positions.py
+        ;;
+    close)
+        echo "⚠️  Closing open position..."
+        source .venv/bin/activate
+        python scripts/close_position.py
+        ;;
+    health)
+        echo "🏥 Bot Health Check"
+        echo "==================="
+        echo ""
+        echo "Service Status:"
+        sudo systemctl is-active tradingbot && echo "✅ Running" || echo "❌ Stopped"
+        echo ""
+        echo "Last 5 log entries:"
+        sudo journalctl -u tradingbot -n 5 --no-pager
+        echo ""
+        echo "Recent errors (last hour):"
+        sudo journalctl -u tradingbot --since "1 hour ago" | grep -i error | tail -5 || echo "✅ No errors"
+        ;;
+    *)
+        echo "🤖 TradingETH Bot Control"
+        echo "========================"
+        echo ""
+        echo "Usage: $0 {command}"
+        echo ""
+        echo "Commands:"
+        echo "  start    - Start the bot"
+        echo "  stop     - Stop the bot"
+        echo "  restart  - Restart the bot"
+        echo "  status   - Show bot status"
+        echo "  logs     - View live logs (Ctrl+C to exit)"
+        echo "  errors   - Show recent errors"
+        echo "  trades   - Show recent trades"
+        echo "  position - Check current position"
+        echo "  close    - Close current position manually"
+        echo "  health   - Full health check"
+        echo ""
+        exit 1
+        ;;
+esac

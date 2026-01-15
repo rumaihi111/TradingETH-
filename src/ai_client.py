@@ -437,8 +437,16 @@ Return your trading decision as JSON:"""
             if tp_pct > 0:
                 monitor_info += f"- Take Profit set at {tp_pct*100:.1f}% from entry\n"
             monitor_info += "- Decide whether to CLOSE (side=\"flat\") or HOLD (side=\"" + pos_side + "\").\n"
-            monitor_info += "- Close if: SL/TP reached, reversal pattern detected, or risk increases.\n"
-            monitor_info += "- Hold if: trend intact, price action supports continuation.\n"
+            monitor_info += "- ONLY CLOSE IF:\n"
+            monitor_info += "  1. Clear trend reversal confirmed (multiple bearish candles for long / bullish for short)\n"
+            monitor_info += "  2. Major support/resistance broken with strong momentum\n"
+            monitor_info += "  3. Clear invalidation pattern (not just profit-taking)\n"
+            monitor_info += "- DO NOT CLOSE JUST BECAUSE:\n"
+            monitor_info += "  - Small pullback in your favor (normal price action)\n"
+            monitor_info += "  - Target reached (let winners run unless invalidated)\n"
+            monitor_info += "  - Single red/green candle (noise, not signal)\n"
+            monitor_info += "- DEFAULT TO HOLDING unless you have STRONG evidence of reversal\n"
+            monitor_info += "- Remember: You opened this trade for a reason - trust your setup unless clearly broken\n"
             monitor_info += "- Do NOT flip direction while monitoring."
             system_prompt = system_prompt + monitor_info
         elif venice_side:

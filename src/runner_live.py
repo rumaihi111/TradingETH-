@@ -82,6 +82,10 @@ async def run_live_async():
     risk_manager = RiskManager()
     spot = ccxt.kucoin()
     rate_limit_backoff = 60  # Start with 60 second backoff on rate limit
+    
+    # Track when positions are opened to enforce minimum hold time
+    position_opened_at = None
+    minimum_hold_minutes = 15  # Don't close positions for at least 15 minutes
 
     while True:
         try:
@@ -199,6 +203,7 @@ async def run_live_async():
                         )
                     trade_log.log_trade({"decision": {"side": "close", "reason": reason}, "result": close_result, "price": price})
                     guard.record_close()
+                    position_opened_at = None  # Reset position timer
                     
                     # Clear AI history for fresh start on next trade
                     history.clear_history()
@@ -257,6 +262,15 @@ async def run_live_async():
         # Decision logic: close/flip/hold/open based on signal
         if trade.side == "flat":
             if current_pos:
+                # Check if minimum hold time has passed
+                if position_opened_at is not None:
+                    minutes_held = (time.time() - position_opened_at) / 60
+                    if minutes_held < minimum_hold_minutes:
+                        print(f"⏳ Position held for {minutes_held:.1f}m < {minimum_hold_minutes}m minimum - refusing to close")
+                        print(f"   AI wanted to close but we're enforcing minimum hold time")
+                        await asyncio.sleep(300)  # Wait 5 minutes before checking again
+                        continue
+                
                 # Claude wants to close position
                 ohlcv_close = spot.fetch_ohlcv("ETH/USDT", timeframe="5m", limit=1)
                 close_price = ohlcv_close[0][4]
@@ -293,6 +307,7 @@ async def run_live_async():
                 trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price})
                 print(f"Signal: flat → Position closed @ {close_price}, result={close_result}")
                 guard.record_close()
+                position_opened_at = None  # Reset position timer
                 
                 # Clear AI history for fresh start on next trade
                 history.clear_history()
@@ -364,6 +379,7 @@ async def run_live_async():
             trade_log.log_trade({"decision": {"side": "close"}, "result": close_result, "price": close_price, "pnl": pnl_value})
             print(f"Signal: {trade.side} → Closed {current_side} position @ ${close_price:.2f} (P&L: ${pnl_value:+.2f})")
             guard.record_close()
+            position_opened_at = None  # Reset position timer before opening new position
             
             # Clear AI history for fresh start on next trade
             history.clear_history()
@@ -414,6 +430,7 @@ async def run_live_async():
         
         # Record trade open
         pnl.record_trade("open", size, price)
+        position_opened_at = time.time()  # Track when position was opened
         
         # Send Telegram notification for opened trade
         if telegram_bot:
@@ -504,6 +521,7 @@ async def run_live_async():
                     ex.close_position(settings.trading_pair, price=market_price)
                 else:
                     ex.close_position(settings.trading_pair)
+                position_opened_at = None  # Reset position timer
                 # Clear AI history after emergency close
                 history.clear_history()
             # Set shutdown window and notify
@@ -517,11 +535,11 @@ async def run_live_async():
             await asyncio.sleep(600)
             continue
 
-        # Dynamic wait: 5 min scan when flat & cooldown passed, 30 min after opening trade
+        # Dynamic wait: 5 min scan when flat & cooldown passed, 15 min when monitoring
         if current_position:
-            # Monitoring mode: check every 5 minutes
-            print(f"📊 Next check in 5 minutes (monitoring position)")
-            await asyncio.sleep(300)
+            # Monitoring mode: check every 15 minutes to avoid over-management
+            print(f"📊 Next check in 15 minutes (monitoring position)")
+            await asyncio.sleep(900)
         elif guard.allow_new_trade():
             # No position and cooldown passed: scan every 5 minutes
             print(f"🔍 Next scan in 5 minutes (no position, seeking entry)")

@@ -1,14 +1,27 @@
 [Unit]
-Description=TradingETH bot (paper or live)
-After=network.target
+Description=TradingETH Bot - 24/7 Automated Trading
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
+User=%USER%
 WorkingDirectory=/workspaces/TradingETH-
 EnvironmentFile=/workspaces/TradingETH-/.env
-ExecStart=/usr/bin/env bash -lc 'cd /workspaces/TradingETH- && source .venv/bin/activate && PYTHONPATH=/workspaces/TradingETH-/src python -m runner_live'
+
+# Run the bot with proper Python path
+ExecStart=/workspaces/TradingETH-/.venv/bin/python -m src.runner_live
+
+# Restart configuration for 24/7 operation
 Restart=always
-RestartSec=5
+RestartSec=10
+
+# Logging
+StandardOutput=append:/var/log/tradingbot.log
+StandardError=append:/var/log/tradingbot-error.log
+
+# Resource limits (optional but recommended)
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
