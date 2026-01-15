@@ -152,3 +152,120 @@ src/
 - Install: `pip install -r requirements.txt`
 - Smoke test: `python scripts/smoke_test.py`
 - Run live (paper): `python -m src.runner_live`
+
+---
+
+## 🚀 Advanced Trading Features (Latest Update)
+
+### Multi-Timeframe Analysis
+The bot now analyzes market structure across two timeframes:
+- **15-minute**: Determines bias (HH/HL = bullish, LH/LL = bearish)
+- **5-minute**: Executes entries on nested fractals
+
+**Rules:**
+- HH/HL on 15m → ONLY long fractals on 5m
+- LH/LL on 15m → ONLY short fractals on 5m
+- Mixed/flat → NO TRADES
+
+**Configuration:**
+```bash
+REQUIRE_TIMEFRAME_ALIGNMENT=true  # Enforce MTF rules
+BIAS_TIMEFRAME=15m                # Timeframe for bias
+BIAS_CANDLE_LIMIT=100             # Candles for bias analysis
+BIAS_LOOKBACK=20                  # Candles to analyze for structure
+```
+
+### Volatility Gate (MANDATORY)
+Prevents trading in compressed volatility conditions where:
+- Spreads eat profits
+- Breakouts fail
+- Fractals become meaningless
+
+**How it works:**
+- Measures current 5m ATR vs recent average
+- Blocks trades if ATR < 70-80% of average
+- Requires volatility expansion or expansion transition
+
+**Configuration:**
+```bash
+ENABLE_VOLATILITY_GATE=true       # Enable volatility filtering
+ATR_PERIOD=14                     # Period for ATR calculation
+ATR_COMPRESSION_THRESHOLD=0.75    # Ratio threshold (75%)
+REQUIRE_VOLATILITY_EXPANSION=true # Require expansion to trade
+```
+
+### Time-of-Day Filter (MANDATORY)
+Blocks trading during known low-liquidity periods:
+- Lunch hours (11:30 AM - 1:00 PM ET)
+- Pre-market close (3:30 PM - 4:00 PM ET)
+- Overnight/after hours (6:00 PM - 8:30 AM ET)
+
+**Why:** Liquidity collapses, algorithms dominate, patterns fail structurally.
+
+**Configuration:**
+```bash
+ENABLE_TIME_FILTER=true           # Enable time filtering
+TIMEZONE=America/New_York         # Timezone for time checks
+```
+
+### Session Context Awareness
+Identifies session high, low, and range boundaries to assess trade quality:
+- **Middle of range** = garbage (low quality)
+- **Near extremes** = high probability setups
+- Longs in lower third = good (room to run)
+- Shorts in upper third = good (room to run)
+
+**Configuration:**
+```bash
+ENABLE_SESSION_CONTEXT=true       # Enable session analysis
+SESSION_START_HOUR=9              # Session start (24h format)
+SESSION_START_MINUTE=30           # Session start minute
+```
+
+### Enhanced Execution Logic
+**Entry Modes:**
+1. **break_retest** - Enter on pullback after initial break
+2. **pullback** - Enter on pullback to key level
+3. **limit_midpoint** - Limit entry at fractal midpoint
+
+**Stop Placement:**
+- Beyond invalidation level
+- Outside noise (volatility-adjusted)
+- ATR-based buffer: 1.5x ATR default
+- Too tight = death by sweep, too wide = R:R collapses
+
+**Time-Based Stops:**
+- Exit if no movement within 6-10 candles (5m)
+- Real fractal trades move quickly
+- Stagnation = wrong context
+
+**Configuration:**
+```bash
+ENTRY_MODE=break_retest           # Entry strategy
+STOP_ATR_MULTIPLIER=1.5           # Stop distance in ATR units
+MIN_RR_RATIO=2.0                  # Minimum risk:reward ratio
+TIME_STOP_CANDLES=8               # Exit after N candles with no movement
+```
+
+### New Modules
+- **multi_timeframe.py** - Multi-timeframe market structure analysis
+- **volatility_gate.py** - ATR compression detection and filtering
+- **time_filter.py** - Time-of-day no-trade windows
+- **session_context.py** - Session high/low/range analysis
+- **trade_execution.py** - Enhanced entry/stop/time management
+
+### Filter Flow
+```
+1. ⏰ Time Filter    → Block if in no-trade window
+2. 💨 Volatility Gate → Block if ATR compressed
+3. 📈 MTF Alignment  → Block if 15m bias neutral
+4. 🔍 Fractal Brain  → Analyze nested patterns
+5. 🤖 AI Decision    → Claude makes decision
+6. ✅ Post-Validation → Check MTF alignment + session context
+7. 📊 Execute/Skip   → Trade or override to flat
+```
+
+All filters are logged with detailed output showing:
+- Current values and thresholds
+- Pass/fail status with reasons
+- Override decisions when filters block trades

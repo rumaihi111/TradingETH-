@@ -23,10 +23,32 @@ async def run_live_async():
     settings = load_settings()
     history = HistoryStore()
     trade_log = TradeLogger()
-    ai = AISignalClient(api_key=settings.anthropic_api_key, history_store=history,
+    ai = AISignalClient(
+        api_key=settings.anthropic_api_key, 
+        history_store=history,
         venice_api_key=settings.venice_api_key,
         venice_endpoint=settings.venice_endpoint,
         venice_model=settings.venice_model,
+        # Multi-timeframe settings
+        require_timeframe_alignment=settings.require_timeframe_alignment,
+        bias_lookback=settings.bias_lookback,
+        # Volatility gate settings
+        enable_volatility_gate=settings.enable_volatility_gate,
+        atr_period=settings.atr_period,
+        atr_compression_threshold=settings.atr_compression_threshold,
+        require_volatility_expansion=settings.require_volatility_expansion,
+        # Time filter settings
+        enable_time_filter=settings.enable_time_filter,
+        timezone=settings.timezone,
+        # Session context settings
+        enable_session_context=settings.enable_session_context,
+        session_start_hour=settings.session_start_hour,
+        session_start_minute=settings.session_start_minute,
+        # Execution settings
+        entry_mode=settings.entry_mode,
+        stop_atr_multiplier=settings.stop_atr_multiplier,
+        min_rr_ratio=settings.min_rr_ratio,
+        time_stop_candles=settings.time_stop_candles,
     )
     use_paper = settings.paper_mode
     if use_paper:
@@ -63,9 +85,16 @@ async def run_live_async():
 
     while True:
         try:
-            # Fetch latest candles per settings (ETH only, 5m timeframe, 350 limit)
+            # Fetch 5m candles for execution
             ohlcv = spot.fetch_ohlcv("ETH/USDT", timeframe=settings.timeframe, limit=settings.candle_limit)
             candles = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv]
+            
+            # Fetch 15m candles for bias determination
+            candles_15m = None
+            if settings.require_timeframe_alignment:
+                ohlcv_15m = spot.fetch_ohlcv("ETH/USDT", timeframe=settings.bias_timeframe, limit=settings.bias_candle_limit)
+                candles_15m = [{"ts": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4], "volume": c[5]} for c in ohlcv_15m]
+            
             price = candles[-1]["close"]
             
             # Get current positions ONCE at start of loop
@@ -212,7 +241,7 @@ async def run_live_async():
         
         # Current position passed to AI for monitoring/decision routing
         current_position = open_positions[0] if open_positions else None
-        decision_raw: Dict = ai.fetch_signal(candles, current_position=current_position)
+        decision_raw: Dict = ai.fetch_signal(candles, candles_15m=candles_15m, current_position=current_position)
         trade = clamp_decision(decision_raw, settings.max_position_fraction)
 
         # Determine current position state

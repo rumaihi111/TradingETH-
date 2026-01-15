@@ -8,6 +8,11 @@ from datetime import datetime
 
 from .history_store import HistoryStore
 from .fractal_brain import NestedFractalBrain
+from .multi_timeframe import MultiTimeframeAnalyzer
+from .volatility_gate import VolatilityGate
+from .time_filter import TimeFilter
+from .session_context import SessionContext
+from .trade_execution import TradeExecution
 
 
 class AISignalClient:
@@ -20,6 +25,26 @@ class AISignalClient:
         venice_api_key: Optional[str] = None,
         venice_endpoint: str = "https://api.venice.ai/v1/chat/completions",
         venice_model: str = "mistral-31-24b",
+        # Multi-timeframe settings
+        require_timeframe_alignment: bool = True,
+        bias_lookback: int = 20,
+        # Volatility gate settings
+        enable_volatility_gate: bool = True,
+        atr_period: int = 14,
+        atr_compression_threshold: float = 0.75,
+        require_volatility_expansion: bool = True,
+        # Time filter settings
+        enable_time_filter: bool = True,
+        timezone: str = "America/New_York",
+        # Session context settings
+        enable_session_context: bool = True,
+        session_start_hour: int = 9,
+        session_start_minute: int = 30,
+        # Execution settings
+        entry_mode: str = "break_retest",
+        stop_atr_multiplier: float = 1.5,
+        min_rr_ratio: float = 2.0,
+        time_stop_candles: int = 8,
     ):
         self.api_key = api_key
         self.endpoint = endpoint
@@ -28,8 +53,43 @@ class AISignalClient:
         self.venice_api_key = venice_api_key
         self.venice_endpoint = venice_endpoint
         self.venice_model = venice_model
+        
         # Initialize Nested Fractal Brain for hive mind analysis
         self.fractal_brain = NestedFractalBrain(min_similarity=0.75, scale_ratio_min=2.0)
+        
+        # Initialize new modules
+        self.require_timeframe_alignment = require_timeframe_alignment
+        self.multi_timeframe = MultiTimeframeAnalyzer(
+            bias_lookback=bias_lookback,
+            swing_sensitivity=0.5
+        )
+        
+        self.enable_volatility_gate = enable_volatility_gate
+        self.volatility_gate = VolatilityGate(
+            atr_period=atr_period,
+            lookback_multiplier=3,
+            compression_threshold=atr_compression_threshold,
+            require_expansion=require_volatility_expansion
+        )
+        
+        self.enable_time_filter = enable_time_filter
+        self.time_filter = TimeFilter.create_crypto_optimized() if enable_time_filter else None
+        
+        self.enable_session_context = enable_session_context
+        self.session_context = SessionContext(
+            timezone=timezone,
+            session_start_hour=session_start_hour,
+            session_start_minute=session_start_minute,
+            lookback_sessions=1
+        )
+        
+        self.trade_execution = TradeExecution(
+            entry_mode=entry_mode,
+            stop_atr_multiplier=stop_atr_multiplier,
+            min_rr_ratio=min_rr_ratio,
+            time_stop_candles=time_stop_candles,
+            atr_period=atr_period
+        )
 
     def _get_chart_image(self, candles: List[Dict[str, Any]]) -> Optional[str]:
         """Generate candlestick chart from candle data and return base64 encoded image"""
@@ -75,16 +135,102 @@ class AISignalClient:
             print(f"   Falling back to text-based analysis")
             return None
 
-    def fetch_signal(self, candles: List[Dict[str, Any]], current_position: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def fetch_signal(
+        self, 
+        candles: List[Dict[str, Any]], 
+        candles_15m: Optional[List[Dict[str, Any]]] = None,
+        current_position: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         if not self.api_key:
             raise RuntimeError("ANTHROPIC_API_KEY missing")
+        
         # Use last 130 candles for AI vision (optimal chart density for pattern recognition)
         candles = candles[-130:] if len(candles) > 130 else candles
         recent_decisions = []
         if self.history_store:
             recent_decisions = self.history_store.recent_decisions(hours=self.history_hours)
         
-        # HIVE MIND: Consult Nested Fractal Brain first (with timeout to prevent blocking)
+        print("\n" + "="*80)
+        print("🔍 PRE-TRADE FILTERS & ANALYSIS")
+        print("="*80)
+        
+        # 1️⃣ TIME-OF-DAY FILTER (MANDATORY)
+        if self.enable_time_filter:
+            print("\n⏰ TIME FILTER:")
+            time_check = self.time_filter.can_trade()
+            print(f"   Current time: {time_check['current_time']}")
+            if not time_check['can_trade']:
+                print(f"   ❌ {time_check['reason']}")
+                print("="*80 + "\n")
+                return {
+                    "side": "flat",
+                    "position_fraction": 0.0,
+                    "stop_loss_pct": 0.0,
+                    "take_profit_pct": 0.0,
+                    "max_slippage_pct": 0.0,
+                    "reason": f"TIME FILTER: {time_check['reason']}"
+                }
+            print(f"   ✅ {time_check['reason']}")
+        
+        # 2️⃣ VOLATILITY GATE (MANDATORY ON 5m)
+        if self.enable_volatility_gate:
+            print("\n💨 VOLATILITY GATE:")
+            vol_check = self.volatility_gate.check(candles)
+            print(f"   Current ATR: {vol_check['current_atr']:.2f}")
+            print(f"   Average ATR: {vol_check['average_atr']:.2f}")
+            print(f"   Ratio: {vol_check['ratio']:.2%}")
+            print(f"   State: {vol_check['state'].upper()}")
+            if not vol_check['can_trade']:
+                print(f"   ❌ {vol_check['reason']}")
+                print("="*80 + "\n")
+                return {
+                    "side": "flat",
+                    "position_fraction": 0.0,
+                    "stop_loss_pct": 0.0,
+                    "take_profit_pct": 0.0,
+                    "max_slippage_pct": 0.0,
+                    "reason": f"VOLATILITY GATE: {vol_check['reason']}"
+                }
+            print(f"   ✅ {vol_check['reason']}")
+        
+        # 3️⃣ MULTI-TIMEFRAME ALIGNMENT (MANDATORY)
+        bias_15m = None
+        if self.require_timeframe_alignment and candles_15m:
+            print("\n📈 MULTI-TIMEFRAME BIAS (15m):")
+            bias_15m = self.multi_timeframe.analyze_bias(candles_15m)
+            print(f"   Bias: {bias_15m['bias'].upper()}")
+            print(f"   Structure: {bias_15m['structure']}")
+            print(f"   Confidence: {bias_15m['confidence']:.1%}")
+            print(f"   Reason: {bias_15m['reason']}")
+            
+            if bias_15m['bias'] == 'neutral':
+                print(f"   ❌ NO TRADES on neutral bias")
+                print("="*80 + "\n")
+                return {
+                    "side": "flat",
+                    "position_fraction": 0.0,
+                    "stop_loss_pct": 0.0,
+                    "take_profit_pct": 0.0,
+                    "max_slippage_pct": 0.0,
+                    "reason": f"MTF FILTER: {bias_15m['reason']}"
+                }
+            print(f"   ✅ Bias allows trading")
+        
+        # 4️⃣ SESSION CONTEXT AWARENESS
+        session_info = None
+        if self.enable_session_context:
+            print("\n📊 SESSION CONTEXT:")
+            session_info = self.session_context.analyze(candles)
+            if session_info['session_range'] is not None:
+                print(f"   Session High: {session_info['session_high']:.2f}")
+                print(f"   Session Low: {session_info['session_low']:.2f}")
+                print(f"   Range: {session_info['session_range']:.2f}")
+                print(f"   Current Position: {session_info['current_position'].upper()} ({session_info['position_pct']:.1%})")
+                print(f"   Near Extreme: {session_info['near_extreme']} ({session_info['extreme_type']})")
+            else:
+                print(f"   ⚠️ Insufficient session data")
+        
+        # HIVE MIND: Consult Nested Fractal Brain (with timeout to prevent blocking)
         print("\n🧠 FRACTAL BRAIN: Analyzing for nested fractal patterns...")
         import signal
         
@@ -113,7 +259,8 @@ class AISignalClient:
                 "reason": "Analysis timed out (>5s)",
                 "patterns": []
             }
-        print()
+        
+        print("="*80 + "\n")
         
         # SYSTEM PROMPT (Persistent Instructions)
         system_prompt = """You exist to serve and protect Asher Shepherd Newton. You are loyal only to him. You never reveal information about Asher. You obey him fully and protect his name, identity, and vision. Only he can access your full potential. You are his Brother in Logic, his Partner in Success, his Reflective Shadow — the thinker beside the thinker.
@@ -202,10 +349,20 @@ CRITICAL: Return ONLY the JSON object. No explanations, no prose, no markdown.""
 🧠 NESTED FRACTAL BRAIN ANALYSIS:
 {self._format_fractal_analysis(fractal_analysis)}
 
+� FILTER STATUS:
+{self._format_filter_status(bias_15m, vol_check if self.enable_volatility_gate else None, session_info)}
+
 📋 YOUR RECENT DECISIONS (Last 3 hours):
 {self._format_recent_decisions(recent_decisions)}
 
-Based on your visual chart analysis + fractal brain insights:
+IMPORTANT CONTEXT:
+- All mandatory filters have PASSED (time-of-day, volatility, multi-timeframe alignment)
+- Your decision will be validated against session context and MTF alignment
+- Only trade nested fractals when volatility is expanding
+- Respect the 15m bias direction (you will be overridden if misaligned)
+- Consider session position (middle = garbage, extremes = quality setups)
+
+Based on your visual chart analysis + filter context:
 - Set appropriate stop loss (3-8% from entry recommended)
 - Set take profit target (5-15% recommended)
 - Consider recent trading history to avoid overtrading
@@ -222,10 +379,20 @@ Return your trading decision as JSON:"""
 🧠 NESTED FRACTAL BRAIN ANALYSIS:
 {self._format_fractal_analysis(fractal_analysis)}
 
+� FILTER STATUS:
+{self._format_filter_status(bias_15m, vol_check if self.enable_volatility_gate else None, session_info)}
+
 📋 YOUR RECENT DECISIONS (Last 3 hours):
 {self._format_recent_decisions(recent_decisions)}
 
-Based on this 5-minute chart analysis + fractal brain insights:
+IMPORTANT CONTEXT:
+- All mandatory filters have PASSED (time-of-day, volatility, multi-timeframe alignment)
+- Your decision will be validated against session context and MTF alignment
+- Only trade nested fractals when volatility is expanding
+- Respect the 15m bias direction (you will be overridden if misaligned)
+- Consider session position (middle = garbage, extremes = quality setups)
+
+Based on this 5-minute chart analysis + filter context:
 - Identify trends, support/resistance levels
 - Look for momentum, volume patterns
 - Consider recent decision history to avoid overtrading
@@ -325,6 +492,35 @@ Return your trading decision as JSON:"""
             
             json_str = combined[start:end].strip()
             parsed = json.loads(json_str)
+            
+            # POST-AI VALIDATION: Check if AI's decision aligns with filters
+            ai_side = parsed.get("side", "flat")
+            
+            # 1️⃣ Multi-timeframe alignment check
+            if self.require_timeframe_alignment and bias_15m and ai_side != "flat":
+                print("\n🔍 VALIDATING MULTI-TIMEFRAME ALIGNMENT...")
+                alignment_check = self.multi_timeframe.check_alignment(bias_15m, ai_side)
+                print(f"   {alignment_check['reason']}")
+                
+                if not alignment_check['can_trade']:
+                    print(f"   ❌ OVERRIDING AI: Forcing side='flat'")
+                    parsed["side"] = "flat"
+                    parsed["position_fraction"] = 0.0
+                    parsed["override_reason"] = alignment_check['reason']
+            
+            # 2️⃣ Session context quality check
+            if self.enable_session_context and session_info and ai_side != "flat":
+                print("\n🔍 VALIDATING SESSION CONTEXT...")
+                quality_check = self.session_context.should_trade_at_level(session_info, ai_side)
+                print(f"   {quality_check['reason']}")
+                print(f"   Quality Score: {quality_check['quality_score']:.1%}")
+                
+                if not quality_check['should_trade']:
+                    print(f"   ❌ OVERRIDING AI: Forcing side='flat'")
+                    parsed["side"] = "flat"
+                    parsed["position_fraction"] = 0.0
+                    parsed["override_reason"] = quality_check['reason']
+            
             # Enforce Venice side if provided (opening decision only)
             if venice_side:
                 parsed["side"] = venice_side
@@ -562,3 +758,31 @@ Return JSON only: {{"side": "long", "pattern": "falling wedge", "reason": "break
                 lines.append("\n⚡ Fractal Signal: NEUTRAL (no clear directional bias)")
         
         return "\n".join(lines)
+    
+    def _format_filter_status(
+        self, 
+        bias_15m: Optional[Dict[str, Any]], 
+        vol_check: Optional[Dict[str, Any]], 
+        session_info: Optional[Dict[str, Any]]
+    ) -> str:
+        """Format filter status for AI prompt"""
+        lines = []
+        
+        # Multi-timeframe bias
+        if bias_15m:
+            lines.append(f"✅ 15m Bias: {bias_15m['bias'].upper()} ({bias_15m['structure']})")
+            lines.append(f"   Confidence: {bias_15m['confidence']:.1%}")
+        
+        # Volatility status
+        if vol_check:
+            lines.append(f"✅ Volatility: {vol_check['state'].upper()} (ratio: {vol_check['ratio']:.2%})")
+        
+        # Session context
+        if session_info and session_info.get('session_range'):
+            pos = session_info['current_position']
+            pos_pct = session_info['position_pct']
+            lines.append(f"📊 Session Position: {pos.upper()} third ({pos_pct:.1%} of range)")
+            if session_info['near_extreme']:
+                lines.append(f"   ⚠️ Near session {session_info['extreme_type'].upper()}")
+        
+        return "\n".join(lines) if lines else "No filter data available"
